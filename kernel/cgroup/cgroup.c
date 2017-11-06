@@ -6361,6 +6361,7 @@ static struct kobj_attribute cgroup_features_attr = __ATTR_RO(features);
 
 static struct attribute *cgroup_sysfs_attrs[] = {
 	&cgroup_delegate_attr.attr,
+	&cgroup_features_attr.attr,
 	NULL,
 };
 
