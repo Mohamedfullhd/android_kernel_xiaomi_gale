@@ -29,6 +29,7 @@
 #define __tlb_remove_tlb_entry	__tlb_remove_tlb_entry
 #define tlb_remove_check_page_size_change tlb_remove_check_page_size_change
 
+#define tlb_flush tlb_flush
 extern void tlb_flush(struct mmu_gather *tlb);
 
 /* Get the generic bits... */
