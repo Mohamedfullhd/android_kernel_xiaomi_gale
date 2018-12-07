@@ -306,3 +306,4 @@ L(ret0):
 	mov	result, #0
 	ret
 ENDPIPROC(strncmp)
+EXPORT_SYMBOL_NOKASAN(strncmp)
