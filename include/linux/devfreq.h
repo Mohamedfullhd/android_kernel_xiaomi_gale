@@ -166,6 +166,8 @@ struct devfreq {
 	unsigned long max_freq;
 	unsigned long scaling_min_freq;
 	unsigned long scaling_max_freq;
+	bool is_boost_device;
+	bool max_boost;
 	bool stop_polling;
 
 	/* information for device frequency transition */
@@ -387,6 +389,28 @@ static inline struct devfreq *devfreq_get_devfreq_by_phandle(struct device *dev,
 }
 
 static inline int devfreq_update_stats(struct devfreq *df)
+{
+	return -EINVAL;
+}
+
+//cuixiaogang@SRC.hypnus.2018-04-05. add support to set devfreq limit
+static inline int devfreq_set_limit(struct devfreq *df, unsigned long min, unsigned long max)
+{
+            return -EINVAL;
+}
+static inline int devfreq_get_limit(struct devfreq *df, unsigned long *min, unsigned long *max)
+{
+            return -EINVAL;
+}
+static inline int devfreq_set_limit(struct devfreq *df, unsigned long scaling_min, unsigned long scaling_max)
+{
+            return -EINVAL;
+}
+static inline int devfreq_get_limit(struct devfreq *df, unsigned long *scaling_min, unsigned long *scaling_max)
+{
+            return -EINVAL;
+}
+static inline int update_devfreq(struct devfreq *devfreq)
 {
 	return -EINVAL;
 }
