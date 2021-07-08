@@ -1,12 +1,11 @@
-// SPDX-License-Identifier: GPL-2.0 WITH Linux-syscall-note
 /*
  *
- * (C) COPYRIGHT 2020-2021 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2020 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
  * Foundation, and any use by you of this program is subject to the terms
- * of such GNU license.
+ * of such GNU licence.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -16,6 +15,8 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, you can access it online at
  * http://www.gnu.org/licenses/gpl-2.0.html.
+ *
+ * SPDX-License-Identifier: GPL-2.0
  *
  */
 
@@ -126,31 +127,31 @@ static bool kbase_capture_dma_buf_mapping(struct kbase_context *kctx,
 	}
 
 	if (unique_buf_imported) {
-		struct kbase_dma_buf *new_buf_node =
-			kzalloc(sizeof(*new_buf_node), GFP_KERNEL);
+		struct kbase_dma_buf *buf_node =
+			kzalloc(sizeof(*buf_node), GFP_KERNEL);
 
-		if (new_buf_node == NULL) {
+		if (buf_node == NULL) {
 			dev_err(kctx->kbdev->dev, "Error allocating memory for kbase_dma_buf\n");
 			/* Dont account for it if we fail to allocate memory */
 			unique_buf_imported = false;
 		} else {
 			struct rb_node **new = &(root->rb_node), *parent = NULL;
 
-			new_buf_node->dma_buf = dma_buf;
-			new_buf_node->import_count = 1;
+			buf_node->dma_buf = dma_buf;
+			buf_node->import_count = 1;
 			while (*new) {
-				struct kbase_dma_buf *new_node;
+				struct kbase_dma_buf *node;
 
 				parent = *new;
-				new_node = rb_entry(parent, struct kbase_dma_buf,
-						   dma_buf_node);
-				if (dma_buf < new_node->dma_buf)
+				node = rb_entry(parent, struct kbase_dma_buf,
+						dma_buf_node);
+				if (dma_buf < node->dma_buf)
 					new = &(*new)->rb_left;
 				else
 					new = &(*new)->rb_right;
 			}
-			rb_link_node(&new_buf_node->dma_buf_node, parent, new);
-			rb_insert_color(&new_buf_node->dma_buf_node, root);
+			rb_link_node(&buf_node->dma_buf_node, parent, new);
+			rb_insert_color(&buf_node->dma_buf_node, root);
 		}
 	} else if (!WARN_ON(!buf_node)) {
 		buf_node->import_count++;
@@ -177,8 +178,8 @@ void kbase_remove_dma_buf_usage(struct kbase_context *kctx,
 
 	spin_lock(&kbdev->gpu_mem_usage_lock);
 	if (dev_mapping_removed) {
-            kbdev->total_gpu_pages -= alloc->nents;
-			kbdev->dma_buf_pages -= alloc->nents;
+		kbdev->total_gpu_pages -= alloc->nents;
+		kbdev->dma_buf_pages -= alloc->nents;
 	}
 
 	if (prcs_mapping_removed) {
@@ -227,3 +228,8 @@ void kbase_add_dma_buf_usage(struct kbase_context *kctx,
 
 	mutex_unlock(&kbdev->dma_buf_lock);
 }
+
+#ifndef CONFIG_TRACE_GPU_MEM
+#define CREATE_TRACE_POINTS
+#include "mali_gpu_mem_trace.h"
+#endif
