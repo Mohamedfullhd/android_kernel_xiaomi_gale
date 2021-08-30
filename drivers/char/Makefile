@@ -60,3 +60,5 @@ obj-$(CONFIG_POWERNV_OP_PANEL)	+= powernv-op-panel.o
 obj-$(CONFIG_ADI)		+= adi.o
 obj-$(CONFIG_RPMB)		+= rpmb/
 obj-$(CONFIG_SRANDOM)		+= srandom/
+obj-$(CONFIG_FRANDOM)           += frandom.o
+
