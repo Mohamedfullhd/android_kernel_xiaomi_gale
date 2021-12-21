@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
  * Copyright (C) 2018-2019 Sultan Alsawaf <sultan@kerneltoast.com>.
+ * Copyright (C) 2021 ZyCromerZ <neetroid97@gmail.com>.
  */
 
 #define pr_fmt(fmt) "cpu_input_boost: " fmt
@@ -78,12 +79,15 @@ static unsigned int get_input_boost_freq(struct cpufreq_policy *policy)
 {
 	unsigned int freq;
 	if (!use_input_boost)
-		return 0;
+		return policy->min;
 
-	if (cpumask_test_cpu(policy->cpu, cpu_lp_mask))
-		freq = max(INPUT_BOOST_FREQ_LP, MIN_FREQ_LP);
-	else
+	if (cpumask_test_cpu(policy->cpu, cpu_perf_mask))
 		freq = max(INPUT_BOOST_FREQ_PERF, MIN_FREQ_PERF);
+	else
+		freq = max(INPUT_BOOST_FREQ_LP, MIN_FREQ_LP);
+
+	if (freq == 0)
+		freq = policy->min;
 
 	return min(freq, policy->max);
 }
@@ -92,14 +96,39 @@ static unsigned int get_max_boost_freq(struct cpufreq_policy *policy)
 {
 	unsigned int freq;
 	if (!use_input_boost)
-		return 0;
+		return policy->max;
 
-	if (cpumask_test_cpu(policy->cpu, cpu_lp_mask))
-		freq = MAX_BOOST_FREQ_LP;
-	else
+	if (cpumask_test_cpu(policy->cpu, cpu_perf_mask)) {
 		freq = MAX_BOOST_FREQ_PERF;
+		if (freq == 0) {
+			freq = INPUT_BOOST_FREQ_PERF;
+		}
+	} else {
+		freq = MAX_BOOST_FREQ_LP;
+		if (freq == 0) {
+			freq = INPUT_BOOST_FREQ_LP;
+		}
+	}
+
+	if (freq == 0)
+		freq = policy->cpuinfo.max_freq;
 
 	return min(freq, policy->max);
+}
+
+static unsigned int get_min_freq(struct cpufreq_policy *policy)
+{
+	unsigned int freq;
+	if (!use_input_boost)
+		return policy->min;
+
+	if (cpumask_test_cpu(policy->cpu, cpu_perf_mask)) {
+			freq = MIN_FREQ_PERF;
+	} else {
+			freq = MIN_FREQ_LP;
+	}
+
+	return max(freq, policy->cpuinfo.min_freq);
 }
 
 static void update_online_cpu_policy(void)
@@ -136,10 +165,10 @@ static void __cpu_input_boost_kick(struct boost_drv *b)
 
 void cpu_input_boost_kick(void)
 {
+	struct boost_drv *b = &boost_drv_g;
+
 	if (!use_input_boost)
 		return;
-
-	struct boost_drv *b = &boost_drv_g;
 
 	__cpu_input_boost_kick(b);
 }
@@ -174,21 +203,21 @@ static void __cpu_input_boost_kick_max(struct boost_drv *b,
 
 void cpu_input_boost_kick_max(unsigned int duration_ms)
 {
+	struct boost_drv *b = &boost_drv_g;
+
 	if (!use_input_boost)
 		return;
-
-	struct boost_drv *b = &boost_drv_g;
 
 	__cpu_input_boost_kick_max(b, duration_ms);
 }
 
 static void input_unboost_worker(struct work_struct *work)
 {
-	if (!use_input_boost)
-		return;
-
 	struct boost_drv *b = container_of(to_delayed_work(work),
 					   typeof(*b), input_unboost);
+
+	if (!use_input_boost)
+		return;
 
 	clear_bit(INPUT_BOOST, &b->state);
 	wake_up(&b->boost_waitq);
@@ -196,11 +225,11 @@ static void input_unboost_worker(struct work_struct *work)
 
 static void max_unboost_worker(struct work_struct *work)
 {
-	if (!use_input_boost)
-		return;
-
 	struct boost_drv *b = container_of(to_delayed_work(work),
 					   typeof(*b), max_unboost);
+
+	if (!use_input_boost)
+		return;
 
 	clear_bit(MAX_BOOST, &b->state);
 	wake_up(&b->boost_waitq);
@@ -208,14 +237,14 @@ static void max_unboost_worker(struct work_struct *work)
 
 static int cpu_thread(void *data)
 {
-	if (!use_input_boost)
-		return 0;
-
 	static const struct sched_param sched_max_rt_prio = {
 		.sched_priority = MAX_RT_PRIO - 1
 	};
 	struct boost_drv *b = data;
 	unsigned long old_state = 0;
+
+	if (!use_input_boost)
+		return 0;
 
 	sched_setscheduler_nocheck(current, SCHED_FIFO, &sched_max_rt_prio);
 
@@ -240,18 +269,18 @@ static int cpu_thread(void *data)
 static int cpu_notifier_cb(struct notifier_block *nb, unsigned long action,
 			   void *data)
 {
-	if (!use_input_boost)
-		return 0;
-
 	struct boost_drv *b = container_of(nb, typeof(*b), cpu_notif);
 	struct cpufreq_policy *policy = data;
+
+	if (!use_input_boost)
+		return NOTIFY_OK;
 
 	if (action != CPUFREQ_ADJUST)
 		return NOTIFY_OK;
 
 	/* Unboost when the screen is off */
 	if (test_bit(SCREEN_OFF, &b->state)) {
-		policy->min = policy->cpuinfo.min_freq;
+		policy->min = get_min_freq(policy);
 		return NOTIFY_OK;
 	}
 
@@ -267,10 +296,8 @@ static int cpu_notifier_cb(struct notifier_block *nb, unsigned long action,
 	 */
 	if (test_bit(INPUT_BOOST, &b->state))
 		policy->min = get_input_boost_freq(policy);
-	else if (cpumask_test_cpu(policy->cpu, cpu_lp_mask))
-		policy->min = MIN_FREQ_LP;
 	else
-		policy->min = MIN_FREQ_PERF;
+		policy->min = get_min_freq(policy);
 
 	return NOTIFY_OK;
 }
@@ -279,7 +306,7 @@ static int fb_notifier_cb(struct notifier_block *nb,
 			  unsigned long action, void *data)
 {
 	if (!use_input_boost)
-		return 0;
+		return NOTIFY_OK;
 
 	struct boost_drv *b = container_of(nb, typeof(*b), fb_notif);
 	int *blank = ((struct fb_event *)data)->data;
@@ -306,10 +333,6 @@ static void cpu_input_boost_input_event(struct input_handle *handle,
 {
 	struct boost_drv *b = handle->handler->private;
 
-	if (!use_input_boost)
-		return;
-
-
 	__cpu_input_boost_kick(b);
 }
 
@@ -319,9 +342,6 @@ static int cpu_input_boost_input_connect(struct input_handler *handler,
 {
 	struct input_handle *handle;
 	int ret;
-
-	if (!use_input_boost)
-		return 0;
 
 	handle = kzalloc(sizeof(*handle), GFP_KERNEL);
 	if (!handle)
@@ -350,9 +370,6 @@ free_handle:
 
 static void cpu_input_boost_input_disconnect(struct input_handle *handle)
 {
-	if (!use_input_boost)
-		return;
-
 	input_close_device(handle);
 	input_unregister_handle(handle);
 	kfree(handle);
