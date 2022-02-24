@@ -252,7 +252,7 @@ int ppm_find_pwr_idx(struct ppm_cluster_status *cluster_status)
 	}
 
 	if (!pwr_idx) {
-		ppm_warn("@%s: pwr_idx is 0!\n", __func__);
+		// ppm_warn("@%s: pwr_idx is 0!\n", __func__);
 		return -1; /* not found */
 	}
 
@@ -334,7 +334,7 @@ unsigned int ppm_calc_total_power(struct ppm_cluster_status *cluster_status,
 	}
 
 	if (!budget) {
-		ppm_warn("@%s: pwr_idx is 0!\n", __func__);
+		// ppm_warn("@%s: pwr_idx is 0!\n", __func__);
 		return -1; /* not found */
 	}
 

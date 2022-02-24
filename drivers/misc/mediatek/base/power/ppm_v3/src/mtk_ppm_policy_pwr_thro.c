@@ -59,7 +59,7 @@ static void ppm_pwrthro_bat_per_protect(BATTERY_PERCENT_LEVEL level)
 	ppm_lock(&pwrthro_policy.lock);
 
 	if (!pwrthro_policy.is_enabled) {
-		ppm_warn("@%s: pwrthro policy is not enabled!\n", __func__);
+		// ppm_warn("@%s: pwrthro policy is not enabled!\n", __func__);
 		ppm_unlock(&pwrthro_policy.lock);
 		goto end;
 	}
@@ -96,7 +96,7 @@ static void ppm_pwrthro_bat_oc_protect(enum BATTERY_OC_LEVEL_TAG level)
 	ppm_lock(&pwrthro_policy.lock);
 
 	if (!pwrthro_policy.is_enabled) {
-		ppm_warn("@%s: pwrthro policy is not enabled!\n", __func__);
+		// ppm_warn("@%s: pwrthro policy is not enabled!\n", __func__);
 		ppm_unlock(&pwrthro_policy.lock);
 		goto end;
 	}
@@ -133,7 +133,7 @@ void ppm_pwrthro_low_bat_protect(enum LOW_BATTERY_LEVEL_TAG level)
 	ppm_lock(&pwrthro_policy.lock);
 
 	if (!pwrthro_policy.is_enabled) {
-		ppm_warn("@%s: pwrthro policy is not enabled!\n", __func__);
+		// ppm_warn("@%s: pwrthro policy is not enabled!\n", __func__);
 		ppm_unlock(&pwrthro_policy.lock);
 		goto end;
 	}
