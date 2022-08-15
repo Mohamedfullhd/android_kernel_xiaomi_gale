@@ -239,9 +239,7 @@ static inline bool __rcu_reclaim(const char *rn, struct rcu_head *head)
 		rcu_callback_t f = head->func;
 
 		RCU_TRACE(trace_rcu_invoke_callback(rn, head);)
-		check_start_time(ts);
-		f(head);
-		check_process_time("rcu_reclaim %ps", ts, f);
+		head->func(head);
 		rcu_lock_release(&rcu_callback_map);
 		return false;
 	}
