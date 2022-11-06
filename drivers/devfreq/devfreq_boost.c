@@ -10,6 +10,7 @@
 #include <linux/input.h>
 #include <linux/kthread.h>
 #include <uapi/linux/sched/types.h>
+#include "governor.h"
 
 enum {
 	SCREEN_OFF,
@@ -29,7 +30,6 @@ struct boost_dev {
 
 struct df_boost_drv {
 	struct boost_dev devices[DEVFREQ_MAX];
-	struct notifier_block fb_notif;
 };
 
 static void devfreq_input_unboost(struct work_struct *work);
@@ -176,33 +176,6 @@ static int devfreq_boost_thread(void *data)
 	return 0;
 }
 
-static int fb_notifier_cb(struct notifier_block *nb, unsigned long action,
-			  void *data)
-{
-	struct df_boost_drv *d = container_of(nb, typeof(*d), fb_notif);
-	int i, *blank = ((struct fb_event *)data)->data;
-
-	/* Parse framebuffer blank events as soon as they occur */
-	if (action != FB_EARLY_EVENT_BLANK)
-		return NOTIFY_OK;
-
-	/* Boost when the screen turns on and unboost when it turns off */
-	for (i = 0; i < DEVFREQ_MAX; i++) {
-		struct boost_dev *b = d->devices + i;
-
-		if (*blank == FB_BLANK_UNBLANK) {
-			clear_bit(SCREEN_OFF, &b->state);
-			__devfreq_boost_kick_max(b,
-				CONFIG_DEVFREQ_WAKE_BOOST_DURATION_MS);
-		} else {
-			set_bit(SCREEN_OFF, &b->state);
-			wake_up(&b->boost_waitq);
-		}
-	}
-
-	return NOTIFY_OK;
-}
-
 static void devfreq_boost_input_event(struct input_handle *handle,
 				      unsigned int type, unsigned int code,
 				      int value)
@@ -312,18 +285,8 @@ static int __init devfreq_boost_init(void)
 		goto stop_kthreads;
 	}
 
-	d->fb_notif.notifier_call = fb_notifier_cb;
-	d->fb_notif.priority = INT_MAX;
-	ret = fb_register_client(&d->fb_notif);
-	if (ret) {
-		pr_err("Failed to register fb notifier, err: %d\n", ret);
-		goto unregister_handler;
-	}
-
 	return 0;
 
-unregister_handler:
-	input_unregister_handler(&devfreq_boost_input_handler);
 stop_kthreads:
 	while (i--)
 		kthread_stop(thread[i]);
