@@ -929,7 +929,7 @@ int kbase_mem_flags_change(struct kbase_context *kctx, u64 gpu_addr, unsigned in
 	 * & GPU queue ringbuffer and none of them needs to be explicitly marked
 	 * as evictable by Userspace.
 	 */
-	if (kbase_va_region_is_no_user_free(kctx, reg))
+	if (reg->flags & KBASE_REG_NO_USER_FREE)
 		goto out_unlock;
 
 	/* Is the region being transitioning between not needed and needed? */
