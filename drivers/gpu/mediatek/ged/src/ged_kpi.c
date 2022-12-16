@@ -258,19 +258,19 @@ static unsigned int gx_dfps; /* variable to fix FPS*/
 static unsigned int gx_frc_mode; /* variable to fix FRC mode*/
 
 #ifdef GED_KPI_CPU_BOOST
-static unsigned int enable_cpu_boost = 1;
+static unsigned int enable_cpu_boost = -1;
 #endif /* GED_KPI_CPU_BOOST */
-static unsigned int enable_gpu_boost = 1;
+static unsigned int enable_gpu_boost = -1;
 #if !defined(CONFIG_MTK_GPU_COMMON_DVFS_SUPPORT)
 /* Disable for bring-up stage unexpected exception */
 static unsigned int is_GED_KPI_enabled;
 #else
 static unsigned int is_GED_KPI_enabled = 1;
 #endif
-static unsigned int ap_self_frc_detection_rate = 20;
+static unsigned int ap_self_frc_detection_rate = 5;
 #ifdef GED_ENABLE_FB_DVFS
 static unsigned int g_force_gpu_dvfs_fallback;
-static int g_fb_dvfs_threshold = 80;
+static int g_fb_dvfs_threshold = 50;
 module_param(g_fb_dvfs_threshold, int, 0644);
 #endif /* GED_ENABLE_FB_DVFS */
 module_param(gx_dfps, uint, 0644);
@@ -301,8 +301,8 @@ static unsigned long long g_CRemTimeAccu; /*g_cpu_remained_time_accum*/
 static unsigned long long g_gpu_freq_accum;
 static unsigned int g_frame_count;
 
-static int gx_game_mode;
-static int gx_boost_on;
+static int gx_game_mode=-1;
+static int gx_boost_on=-1;
 #ifdef GED_KPI_CPU_BOOST
 static int gx_force_cpu_boost;
 static int gx_top_app_pid;
@@ -323,10 +323,10 @@ static long target_t_cpu_remained = 16000000;
 /* static long target_t_cpu_remained_min = 8300000; */
 /* default 0.5 vsync period */
 static int cpu_boost_policy;
-static int boost_extra;
+static int boost_extra=-1;
 static int boost_amp;
 static int deboost_reduce;
-static int boost_upper_bound = 100;
+static int boost_upper_bound = 55;
 static void (*ged_kpi_cpu_boost_policy_fp)(struct GED_KPI_HEAD *psHead,
 	struct GED_KPI *psKPI);
 module_param(target_t_cpu_remained, long, 0644);
