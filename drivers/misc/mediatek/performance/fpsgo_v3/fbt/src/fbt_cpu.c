@@ -59,11 +59,11 @@
 #define TIME_3MS  3000000
 #define TIME_2MS  2000000
 #define TIME_1MS  1000000
-#define TARGET_UNLIMITED_FPS 240
-#define TARGET_DEFAULT_FPS 60
+#define TARGET_UNLIMITED_FPS 120
+#define TARGET_DEFAULT_FPS 120
 #define FBTCPU_SEC_DIVIDER 1000000000
 #define NSEC_PER_HUSEC 100000
-#define BIG_CAP 95
+#define BIG_CAP 65
 #define TIME_MS_TO_NS  1000000ULL
 #define MAX_DEP_NUM 30
 #define LOADING_WEIGHT 50
@@ -168,16 +168,16 @@ static int walt_enable;
 static int set_idleprefer;
 static int suppress_ceiling;
 static int force_walt_off;
-static int boost_ta;
+static int boost_ta=0;;
 static int uclamp_boost_enable;
-static int down_throttle_ns;
-static int fbt_down_throttle_enable;
+static int down_throttle_ns=2000;
+static int fbt_down_throttle_enable=1;
 static int sync_flag;
 static int fbt_sync_flag_enable;
-static int set_cap_margin;
-static int fbt_cap_margin_enable;
+static int set_cap_margin=65;
+static int fbt_cap_margin_enable=1;
 static int ultra_rescue;
-static int loading_policy;
+static int loading_policy=60;
 static int llf_task_policy;
 
 static unsigned int cpu_max_freq;
