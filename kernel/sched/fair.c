@@ -6717,11 +6717,6 @@ int select_max_spare_capacity(struct task_struct *p, int target)
 			continue;
 #endif
 
-#ifdef CONFIG_SCHED_WALT
-		if (walt_cpu_high_irqload(cpu))
-			continue;
-#endif
-
 		if (idle_cpu(cpu))
 			return cpu;
 
