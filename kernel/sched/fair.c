@@ -6940,9 +6940,6 @@ static void find_best_target(struct sched_domain *sd, cpumask_t *cpus,
 	bool prefer_idle;
 	bool boosted;
 	int i;
-	int cpu, i;
-	int backup_idle_min_cpu = -1;
-	int backup_active_min_cpu = -1;
 	struct task_struct *curr_tsk;
 
 	/*
