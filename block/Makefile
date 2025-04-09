@@ -27,7 +27,6 @@ obj-$(CONFIG_IOSCHED_ANXIETY)   += anxiety-iosched.o
 obj-$(CONFIG_IOSCHED_FIOPS)     += fiops-iosched.o
 obj-$(CONFIG_IOSCHED_ZEN)       += zen-iosched.o
 obj-$(CONFIG_IOSCHED_SIOPLUS)       += sioplus-iosched.o
-obj-$(CONFIG_IOSCHED_FIFO)       += fifo-iosched.o
 obj-$(CONFIG_IOSCHED_TRIPNDROID)        += tripndroid-iosched.o
 obj-$(CONFIG_MQ_IOSCHED_DEADLINE)	+= mq-deadline.o
 obj-$(CONFIG_MQ_IOSCHED_KYBER)	+= kyber-iosched.o
