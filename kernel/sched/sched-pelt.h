@@ -41,7 +41,6 @@ static const u32 runnable_avg_yN_inv[] __maybe_unused = {
  #define LOAD_AVG_PERIOD 16
  #define LOAD_AVG_MAX 24130
  #define LOAD_AVG_MAX_N 172
- };
 
  #endif
 
