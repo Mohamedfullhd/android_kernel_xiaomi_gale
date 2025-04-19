@@ -525,6 +525,12 @@ unsigned int mt_gpufreq_voltage_enable_set(unsigned int enable)
 	return 0;
 }
 
+/* API : get immediate gpu temperature */
+ int mt_gpufreq_get_immed_gpu_temp(void)
+ {
+ 	return get_immediate_gpu_wrap();
+ }
+
 /*
  * API : enable DVFS for PTPOD initializing
  */
