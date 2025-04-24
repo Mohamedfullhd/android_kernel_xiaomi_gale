@@ -9,7 +9,7 @@ sudo apt-get install gcc-aarch64-linux-gnu bc -y
 
 git clone https://gitlab.com/LeCmnGend/proton-clang  -b clang-18 --depth=1 $(pwd)/proton-clang
 
-curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash -s v0.9.5
+
 
 
 # change DEFCONFIG to you are defconfig name or device codename
