@@ -37,6 +37,13 @@ config SECURITY_SELINUX_BOOTPARAM_VALUE
 
 	  If you are unsure how to answer this question, answer 1.
 
+config SECURITY_SELINUX_DISABLE_ALL_LOGS
+	bool "NSA SELinux disable logging"
+	depends on SECURITY_SELINUX_DEVELOP
+	default y
+	help
+	  This option will make selinux not report any permissive log or denial in kmsg
+
 config SECURITY_SELINUX_DISABLE
 	bool "NSA SELinux runtime disable"
 	depends on SECURITY_SELINUX
