@@ -285,6 +285,11 @@ void wlanImageSectionGetPatchInfoV2(IN struct ADAPTER
 			num_of_region,
 			be2cpu32(glo_desc->subsys));
 
+	if (num_of_region < 0) {
+		DBGLOG(INIT, WARN, "parse patch failed! num_of_region < 0.\n");
+		return;
+	}
+
 	/* section map */
 	img_ptr += sizeof(struct PATCH_GLO_DESC);
 
@@ -387,6 +392,14 @@ uint32_t wlanDownloadSectionV2(IN struct ADAPTER *prAdapter,
 	uint32_t u4Status = WLAN_STATUS_SUCCESS;
 
 	num_of_region = target->num_of_region;
+	if (num_of_region < 0) {
+		DBGLOG(INIT, ERROR,
+			"Firmware download num_of_region < 0 !\n");
+		u4Status = WLAN_STATUS_FAILURE;
+		goto out;
+	}
+
+
 	for (i = 0; i < num_of_region; i++) {
 		struct patch_dl_buf *region;
 
@@ -1466,7 +1479,7 @@ uint32_t wlanConfigWifiFuncStatus(IN struct ADAPTER
 
 	u4EventSize = prChipInfo->init_evt_rxd_size +
 		prChipInfo->init_event_size +
-		(uint32_t) sizeof(struct INIT_EVENT_CMD_RESULT);
+		sizeof(struct INIT_EVENT_CMD_RESULT);
 	aucBuffer = kalMemAlloc(u4EventSize, PHY_MEM_TYPE);
 	if (aucBuffer == NULL) {
 		DBGLOG(INIT, ERROR, "Alloc CMD buffer failed\n");
@@ -1513,6 +1526,10 @@ uint32_t wlanConfigWifiFuncStatus(IN struct ADAPTER
 					u4Status = WLAN_STATUS_SUCCESS;
 				}
 			}
+
+			if (u4Status != WLAN_STATUS_SUCCESS)
+				DBGLOG_MEM8(INIT, WARN,
+					(uint8_t *) aucBuffer, u4EventSize);
 		}
 	} while (FALSE);
 
@@ -2209,8 +2226,9 @@ uint32_t wlanConnacFormatDownload(IN struct ADAPTER
 		return WLAN_STATUS_FAILURE;
 	}
 
-	if (wlanGetConnacTailerInfo(&prAdapter->rVerInfo, prFwBuffer, u4FwSize,
-				    eDlIdx) != WLAN_STATUS_SUCCESS) {
+	if (wlanGetConnacTailerInfo(&prAdapter->rVerInfo,
+					prFwBuffer, u4FwSize,
+					eDlIdx) != WLAN_STATUS_SUCCESS) {
 		DBGLOG(INIT, WARN, "Get tailer info error!\n");
 		rDlStatus = WLAN_STATUS_FAILURE;
 		goto exit;
@@ -2231,6 +2249,9 @@ uint32_t wlanConnacFormatDownload(IN struct ADAPTER
 	rDlStatus = wlanImageSectionDownloadStage(prAdapter,
 			prFwBuffer, u4FwSize, ucRegionNum, eDlIdx,
 			&fgIsDynamicMemMap);
+
+	if (rDlStatus != WLAN_STATUS_SUCCESS)
+		goto exit;
 
 	ram_entry = wlanDetectRamEntry(&prAdapter->rVerInfo);
 
@@ -2319,7 +2340,10 @@ uint32_t wlanDownloadFW(IN struct ADAPTER *prAdapter)
 	}
 
 	if (prFwDlOps->phyAction)
-		prFwDlOps->phyAction(prAdapter);
+		rStatus = prFwDlOps->phyAction(prAdapter);
+
+	if (rStatus != WLAN_STATUS_SUCCESS)
+		goto exit;
 
 	if (prChipInfo->coantVFE28En)
 		prChipInfo->coantVFE28En(prAdapter);
@@ -2349,10 +2373,11 @@ uint32_t wlanDownloadFW(IN struct ADAPTER *prAdapter)
 		}
 #endif
 	}
+
+exit:
 	DBGLOG(INIT, TRACE, "FW download End\n");
 
 	HAL_ENABLE_FWDL(prAdapter, FALSE);
-
 
 	return rStatus;
 }
@@ -2467,10 +2492,8 @@ uint32_t fwDlGetFwdlInfo(struct ADAPTER *prAdapter,
 
 	prFwDlOps = prAdapter->chip_info->fw_dl_ops;
 
-	kalMemZero(aucBuf, sizeof(aucBuf));
-	kalStrnCpy(aucBuf, prVerInfo->aucFwBranchInfo, sizeof(aucBuf) - 1);
-	kalMemZero(aucDate, sizeof(aucDate));
-	kalStrnCpy(aucDate, prVerInfo->aucFwDateCode, sizeof(aucDate) - 1);
+	kalSnprintf(aucBuf, sizeof(aucBuf), "%4s", prVerInfo->aucFwBranchInfo);
+	kalSnprintf(aucDate, sizeof(aucDate), "%16s", prVerInfo->aucFwDateCode);
 
 	u4Offset += snprintf(pcBuf + u4Offset,
 			i4TotalLen - u4Offset,
@@ -2494,12 +2517,11 @@ uint32_t fwDlGetFwdlInfo(struct ADAPTER *prAdapter,
 #endif
 	}
 
-	kalMemZero(aucBuf, sizeof(aucBuf));
-	kalMemZero(aucDate, sizeof(aucDate));
-	kalStrnCpy(aucBuf, prVerInfo->rPatchHeader.aucPlatform,
-			sizeof(aucBuf) - 1);
-	kalStrnCpy(aucDate, prVerInfo->rPatchHeader.aucBuildDate,
-			sizeof(aucDate) - 1);
+	kalSnprintf(aucBuf, sizeof(aucBuf), "%4s",
+			prVerInfo->rPatchHeader.aucPlatform);
+	kalSnprintf(aucDate, sizeof(aucDate), "%16s",
+			prVerInfo->rPatchHeader.aucBuildDate);
+
 	u4Offset += snprintf(pcBuf + u4Offset,
 			     i4TotalLen - u4Offset,
 			     "Patch platform %s version 0x%04X %s\n",
@@ -2584,9 +2606,9 @@ void wlanReadRamCodeReleaseManifest(uint8_t *pucManifestBuffer,
 {
 #define FW_FILE_NAME_TOTAL 8
 #define FW_FILE_NAME_MAX_LEN 64
-	const struct firmware *fw_entry = NULL;
+	const struct firmware *fw_entry;
 	struct WIFI_VER_INFO *prVerInfo = NULL;
-	struct mt66xx_chip_info *prChipInfo = NULL;
+	struct mt66xx_chip_info *prChipInfo;
 	struct device *prDev;
 	void *prFwBuffer = NULL;
 	uint8_t *aucFwName[FW_FILE_NAME_TOTAL + 1];
@@ -2598,16 +2620,16 @@ void wlanReadRamCodeReleaseManifest(uint8_t *pucManifestBuffer,
 	*pu4ManifestSize = 0;
 
 	glGetChipInfo((void **)&prChipInfo);
-
 	for (idx = 0; idx < FW_FILE_NAME_TOTAL; idx++)
 		aucFwName[idx] = (uint8_t *)(aucFwNameBody + idx);
 	idx = 0;
-
-	if (prChipInfo->fw_dl_ops->constructFirmwarePrio)
+	if (prChipInfo->fw_dl_ops->constructFirmwarePrio) {
 		prChipInfo->fw_dl_ops->constructFirmwarePrio(
 			NULL, NULL, aucFwName, &idx, FW_FILE_NAME_TOTAL);
-	else
+	} else {
+		DBGLOG(INIT, WARN, "Construct FW binary failed\n");
 		goto exit;
+	}
 
 	glGetDev((void *)prChipInfo->pdev, &prDev);
 	if (_kalRequestFirmware(&fw_entry, aucFwName[0], prDev)) {
@@ -2627,11 +2649,6 @@ void wlanReadRamCodeReleaseManifest(uint8_t *pucManifestBuffer,
 
 	prVerInfo = (struct WIFI_VER_INFO *)
 		kalMemAlloc(sizeof(struct WIFI_VER_INFO), VIR_MEM_TYPE);
-	if (!prVerInfo) {
-		DBGLOG(INIT, WARN, "vmalloc(%u) failed\n",
-			sizeof(struct WIFI_VER_INFO));
-		goto exit;
-	}
 	kalMemCopy(prFwBuffer, fw_entry->data, fw_entry->size);
 	if (wlanGetConnacTailerInfo(prVerInfo, prFwBuffer, fw_entry->size,
 			IMG_DL_IDX_N9_FW) != WLAN_STATUS_SUCCESS) {
@@ -2645,6 +2662,7 @@ void wlanReadRamCodeReleaseManifest(uint8_t *pucManifestBuffer,
 	kalMemCopy(pucManifestBuffer,
 		&prVerInfo->aucReleaseManifest,
 		*pu4ManifestSize);
+
 exit:
 	if (prFwBuffer)
 		kalMemFree(prFwBuffer, VIR_MEM_TYPE, ALIGN_4(fw_entry->size));
@@ -2653,4 +2671,5 @@ exit:
 			sizeof(struct WIFI_VER_INFO));
 	release_firmware(fw_entry);
 }
+
 #endif  /* CFG_ENABLE_FW_DOWNLOAD */

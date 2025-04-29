@@ -119,16 +119,21 @@ static ssize_t gps_pwr_read(struct file *file, char __user *buf, size_t count, l
 	if (count > sizeof(int))
 		count = sizeof(int);
 
-	if (copy_to_user(buf, (void *)&battery_level, count)) {
+	if (copy_to_user(buf, (void *)&battery_level, sizeof(int))) {
 		pr_info("gps_pwr_read failed,because copy_to_user error\n");
 		retval = -EFAULT;
 	} else {
-		retval = count;
+		retval = sizeof(int);
 		has_new_battery_level = false;
 		return retval;
 	}
 
-	return retval;
+	if (retval  ==  -EFAULT)
+		goto OUT;
+
+OUT:
+	/*	pr_info("gps_pwr_read(): retval = %d\n", retval);*/
+		return retval;
 
 }
 /******************************************************************************/

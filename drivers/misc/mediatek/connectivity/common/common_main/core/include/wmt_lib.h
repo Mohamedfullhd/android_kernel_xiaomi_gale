@@ -444,7 +444,6 @@ extern INT32 wmt_lib_merge_if_flag_get(UINT32 enable);
 
 extern PUINT8 wmt_lib_get_cpupcr_xml_format(PUINT32 len);
 extern PUINT8 wmt_lib_get_cpupcr_reg_info(PUINT32 len, PUINT32 consys_reg);
-extern INT32 wmt_lib_get_host_assert_info(PUINT32 type, PUINT32 reason, PUINT32 en);
 extern UINT32 wmt_lib_set_host_assert_info(UINT32 type, UINT32 reason, UINT32 en);
 extern INT8 wmt_lib_co_clock_get(VOID);
 extern UINT32 wmt_lib_soc_set_wifiver(UINT32 wifiver);
@@ -469,6 +468,9 @@ extern UINT32 wmt_lib_jtag_flag_set(UINT32 en);
 #endif
 
 UINT32 wmt_lib_get_gps_lna_pin_num(VOID);
+/* begin ,prize-lifenfen-20181211, add FM_LNA_EN */
+UINT32 wmt_lib_get_fm_lna_pin_num(VOID);
+/* end ,prize-lifenfen-20181211, add FM_LNA_EN */
 extern INT32 wmt_lib_fw_log_ctrl(enum wmt_fw_log_type type, UINT8 onoff, UINT8 level);
 VOID wmt_lib_print_wmtd_op_history(VOID);
 VOID wmt_lib_print_worker_op_history(VOID);
@@ -482,6 +484,7 @@ extern INT32 wmt_lib_get_active_patch_version(struct wmt_vendor_patch *p);
 extern INT32 wmt_lib_get_need_update_patch_version(VOID);
 extern INT32 wmt_lib_set_need_update_patch_version(INT32 need);
 extern VOID wmt_lib_set_bt_link_status(INT32 type, INT32 value);
+extern PVOID wmt_lib_consys_clock_get_regmap(VOID);
 VOID mtk_lib_set_mcif_mpu_protection(MTK_WCN_BOOL enable);
 INT32 wmt_lib_dmp_consys_state(P_CONSYS_STATE_DMP_INFO dmp_info,
 				UINT32 cpupcr_times, UINT32 slp_ms);

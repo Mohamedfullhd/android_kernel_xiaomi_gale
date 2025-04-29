@@ -326,6 +326,8 @@ struct SWITCH_CH_AND_BAND_PARAMS {
  *                   F U N C T I O N   D E C L A R A T I O N S
  *******************************************************************************
  */
+uint8_t rlmMaxBwToVhtBw(uint8_t ucMaxBw);
+
 void rlmFsmEventInit(struct ADAPTER *prAdapter);
 
 void rlmFsmEventUninit(struct ADAPTER *prAdapter);
@@ -391,6 +393,8 @@ void rlmFillSyncCmdParam(struct CMD_SET_BSS_RLM_PARAM
 
 void rlmSyncOperationParams(struct ADAPTER *prAdapter,
 			    struct BSS_INFO *prBssInfo);
+
+void rlmSyncAntCtrl(struct ADAPTER *prAdapter, uint8_t txNss, uint8_t rxNss);
 
 void rlmBssInitForAPandIbss(struct ADAPTER *prAdapter,
 			    struct BSS_INFO *prBssInfo);
@@ -487,6 +491,10 @@ rlmNotifyChannelWidthtTxDone(struct ADAPTER *prAdapter,
 
 uint8_t
 rlmGetBssOpBwByVhtAndHtOpInfo(struct BSS_INFO *prBssInfo);
+
+uint8_t
+rlmGetBssOpBwByOwnAndPeerCapability(struct ADAPTER *prAdapter,
+	struct BSS_INFO *prBssInfo);
 
 uint8_t
 rlmGetVhtOpBwByBssOpBw(uint8_t ucBssOpBw);

@@ -173,7 +173,7 @@ uint32_t
 halRxWaitResponse(IN struct ADAPTER *prAdapter,
 		  IN uint8_t ucPortIdx, OUT uint8_t *pucRspBuffer,
 		  IN uint32_t u4MaxRespBufferLen, OUT uint32_t *pu4Length,
-		  IN uint32_t u4WaitingInterval)
+		  IN uint32_t u4WaitingInterval, IN uint32_t u4TimeoutValue)
 {
 	struct GL_HIF_INFO *prHifInfo = &prAdapter->prGlueInfo->rHifInfo;
 	uint32_t u4Status = WLAN_STATUS_SUCCESS;
@@ -950,7 +950,7 @@ void halRxUSBReceiveEventComplete(struct urb *urb)
 	}
 
 	/* Hif power off wifi, drop rx packets and continue polling RX packets until RX path empty */
-	if (prGlueInfo->ulFlag & GLUE_FLAG_HALT) {
+	if (test_bit(GLUE_FLAG_HALT_BIT, &prGlueInfo->ulFlag)) {
 		glUsbEnqueueReq(prHifInfo, &prHifInfo->rRxEventFreeQ, prUsbReq, &prHifInfo->rRxEventQLock, FALSE);
 		halRxUSBReceiveEvent(prGlueInfo->prAdapter, FALSE);
 		return;
@@ -1032,7 +1032,7 @@ void halRxUSBReceiveDataComplete(struct urb *urb)
 	}
 
 	/* Hif power off wifi, drop rx packets and continue polling RX packets until RX path empty */
-	if (prGlueInfo->ulFlag & GLUE_FLAG_HALT) {
+	if (test_bit(GLUE_FLAG_HALT_BIT, &prGlueInfo->ulFlag)) {
 		glUsbEnqueueReq(prHifInfo, &prHifInfo->rRxDataFreeQ, prUsbReq, &prHifInfo->rRxDataQLock, FALSE);
 		halRxUSBReceiveData(prGlueInfo->prAdapter);
 		return;

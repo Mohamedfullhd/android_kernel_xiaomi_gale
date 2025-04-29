@@ -18,7 +18,6 @@
 #include <linux/time.h>
 #include <linux/sched.h>
 #include <asm/div64.h>
-#include <asm/arch_timer.h>
 #include "osal_typedef.h"
 #include "stp_exp.h"
 #include "wmt_exp.h"
@@ -78,19 +77,12 @@ MODULE_LICENSE("GPL");
 #define COMBO_IOC_GPS_HW_RESUME      19
 #define COMBO_IOC_GPS_LISTEN_RST_EVT 20
 #define COMBO_IOC_GPS_GET_MD_STATUS  21
-#define COMBO_IOC_GPS_GET_BOOT_TIME  28
+#define COMBO_IOC_GPS_CTRL_L5_LNA    22
 
 static UINT32 md_status_addr;
 
 static UINT32 gDbgLevel = GPS_LOG_DBG;
 
-#ifndef CONFIG_MTK_CONNECTIVITY_LOG
-#define GPS_DBG_FUNC(fmt, arg...)
-#define GPS_INFO_FUNC(fmt, arg...)
-#define GPS_WARN_FUNC(fmt, arg...)
-#define GPS_ERR_FUNC(fmt, arg...)
-#define GPS_TRC_FUNC(f)
-#else
 #define GPS_DBG_FUNC(fmt, arg...)	\
 do { if (gDbgLevel >= GPS_LOG_DBG)	\
 		pr_debug(PFX "[D]%s: "  fmt, __func__, ##arg);	\
@@ -111,6 +103,9 @@ do { if (gDbgLevel >= GPS_LOG_ERR)	\
 do { if (gDbgLevel >= GPS_LOG_DBG)	\
 		pr_info(PFX "<%s> <%d>\n", __func__, __LINE__);	\
 } while (0)
+
+#ifdef CONFIG_MTK_CONNSYS_DEDICATED_LOG_PATH
+bool fgGps_fwlog_on;
 #endif
 
 #ifdef GPS_FWCTL_SUPPORT
@@ -638,11 +633,7 @@ static int GPS_hw_suspend(UINT8 mode)
 			return -EINVAL; /* Stands for not support */
 
 #ifdef MTK_GENERIC_HAL
-#ifdef CONFIG_GPSL5_SUPPORT
 		wmt_okay = mtk_wmt_gps_l1_suspend_ctrl(MTK_WCN_BOOL_TRUE);
-#else
-		wmt_okay = mtk_wmt_gps_suspend_ctrl(MTK_WCN_BOOL_TRUE);
-#endif
 #else
 #ifdef CONFIG_GPSL5_SUPPORT
 		wmt_okay = mtk_wmt_gps_l1_suspend_ctrl(MTK_WCN_BOOL_TRUE);
@@ -688,11 +679,7 @@ static int GPS_hw_resume(UINT8 mode)
 		GPS_WARN_FUNC("gps_hold_wake_lock(1)\n");
 
 #ifdef MTK_GENERIC_HAL
-#ifdef CONFIG_GPSL5_SUPPORT
 		wmt_okay = mtk_wmt_gps_l1_suspend_ctrl(MTK_WCN_BOOL_FALSE);
-#else
-		wmt_okay = mtk_wmt_gps_suspend_ctrl(MTK_WCN_BOOL_FALSE);
-#endif
 #else
 #ifdef CONFIG_GPSL5_SUPPORT
 		wmt_okay = mtk_wmt_gps_l1_suspend_ctrl(MTK_WCN_BOOL_FALSE);
@@ -721,6 +708,13 @@ static int GPS_hw_resume(UINT8 mode)
 
 void GPS_fwlog_ctrl(bool on)
 {
+#if (defined(GPS_FWCTL_SUPPORT) && defined(CONFIG_MTK_CONNSYS_DEDICATED_LOG_PATH))
+	down(&fwctl_mtx);
+	if (fgGps_fwctl_ready)
+		GPS_fwlog_ctrl_inner(on);
+	fgGps_fwlog_on = on;
+	up(&fwctl_mtx);
+#endif
 }
 
 /* block until wmt reset happen or GPS_close */
@@ -750,8 +744,6 @@ static int GPS_listen_wmt_rst(void)
 long GPS_unlocked_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 {
 	int retval = 0;
-	struct boot_time_info gps_boot_time;
-	unsigned long flags;
 	#if 0
 	ENUM_WMTHWVER_TYPE_T hw_ver_sym = WMTHWVER_INVALID;
 	#endif
@@ -934,26 +926,22 @@ long GPS_unlocked_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 			GPS_ERR_FUNC("Can't get MD2GPS_REG in this platform\n");
 		}
 		break;
-	case COMBO_IOC_GPS_GET_BOOT_TIME:
-		if (arg == 0)
-			retval = -EINVAL;
-		else
+	case COMBO_IOC_GPS_CTRL_L5_LNA:
+#ifdef MTK_GENERIC_HAL
+		if (!IS_ERR(g_gps_lna_pinctrl_ptr)) {
+			if (arg == 1)
+				gps_lna_pin_ctrl(GPS_DATA_LINK_ID1, true, false);
+			else
+				gps_lna_pin_ctrl(GPS_DATA_LINK_ID1, false, false);
 			retval = 0;
-		local_irq_save(flags);
-		#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0)
-		gps_boot_time.now_time = ktime_get_boottime_ns();
-		gps_boot_time.arch_counter = __arch_counter_get_cntvct();
-		#else
-		gps_boot_time.now_time = ktime_get_boot_ns();
-		gps_boot_time.arch_counter = arch_counter_get_cntvct();
-		#endif
-		local_irq_restore(flags);
-		if (copy_to_user((char __user *)arg, &gps_boot_time, sizeof(struct boot_time_info))) {
-			GPS_ERR_FUNC("COMBO_IOC_GPS_GET_BOOT_TIME: copy_to_user error");
+		} else {
 			retval = -EFAULT;
+			GPS_DBG_FUNC("g_gps_lna_pinctrl_ptr not ready\n");
 		}
-		GPS_ERR_FUNC("COMBO_IOC_GPS_GET_BOOT_TIME now_time = %d,arch_counter = %d",
-			gps_boot_time.now_time, gps_boot_time.arch_counter);
+#else
+		GPS_DBG_FUNC("LD1.0 project dont support\n");
+		retval = -EFAULT;
+#endif
 		break;
 	default:
 		retval = -EFAULT;
@@ -996,6 +984,10 @@ static void gps_cdev_rst_cb(ENUM_WMTDRV_TYPE_T src,
 #ifdef GPS_FWCTL_SUPPORT
 				down(&fwctl_mtx);
 				fgGps_fwctl_ready = false;
+#ifdef CONFIG_MTK_CONNSYS_DEDICATED_LOG_PATH
+				/* clean  FWLOG_CTRL_INNER flag in reference_count ,for rst*/
+				GPS_reference_count(FWLOG_CTRL_INNER, false, GPS_DATA_LINK_ID0);
+#endif
 				up(&fwctl_mtx);
 #endif
 				GPS_ctrl_status_change_to(GPS_RESET_START);
@@ -1089,8 +1081,8 @@ static int GPS_open(struct inode *inode, struct file *file)
 #if 1				/* GeorgeKuo: turn on function before check stp ready */
 	/* turn on BT */
 #ifdef MTK_GENERIC_HAL
-	if (IS_ERR(g_gps_lna_pinctrl_ptr))
-	gps_lna_pin_ctrl(GPS_DATA_LINK_ID0, true, false);
+	if (!IS_ERR(g_gps_lna_pinctrl_ptr))
+		gps_lna_pin_ctrl(GPS_DATA_LINK_ID0, true, false);
 #else
 #ifdef CONFIG_GPS_CTRL_LNA_SUPPORT
 	gps_lna_pin_ctrl(GPS_DATA_LINK_ID0, true, false);
@@ -1130,6 +1122,12 @@ static int GPS_open(struct inode *inode, struct file *file)
 #ifdef GPS_FWCTL_SUPPORT
 	down(&fwctl_mtx);
 	GPS_reference_count(GPS_FWCTL_READY, true, GPS_DATA_LINK_ID0);
+#ifdef CONFIG_MTK_CONNSYS_DEDICATED_LOG_PATH
+	if (fgGps_fwlog_on) {
+		/* GPS fw clear log on flag when GPS on, no need to send it if log setting is off */
+		GPS_reference_count(FWLOG_CTRL_INNER, fgGps_fwlog_on, GPS_DATA_LINK_ID0);
+	}
+#endif
 	up(&fwctl_mtx);
 #endif /* GPS_FWCTL_SUPPORT */
 
@@ -1155,11 +1153,15 @@ static int GPS_close(struct inode *inode, struct file *file)
 #ifdef GPS_FWCTL_SUPPORT
 	down(&fwctl_mtx);
 	GPS_reference_count(GPS_FWCTL_READY, false, GPS_DATA_LINK_ID0);
+#ifdef CONFIG_MTK_CONNSYS_DEDICATED_LOG_PATH
+	/* GPS fw clear log on flag when GPS on, this just to clear flag in gps_drv reference count */
+	GPS_reference_count(FWLOG_CTRL_INNER, false, GPS_DATA_LINK_ID0);
+#endif
 	up(&fwctl_mtx);
 #endif
 #ifdef MTK_GENERIC_HAL
-	if (IS_ERR(g_gps_lna_pinctrl_ptr))
-	gps_lna_pin_ctrl(GPS_DATA_LINK_ID0, false, false);
+	if (!IS_ERR(g_gps_lna_pinctrl_ptr))
+		gps_lna_pin_ctrl(GPS_DATA_LINK_ID0, false, false);
 #else
 #ifdef CONFIG_GPS_CTRL_LNA_SUPPORT
 	gps_lna_pin_ctrl(GPS_DATA_LINK_ID0, false, false);
@@ -1187,22 +1189,22 @@ _out:
 	return ret;
 }
 
-int gps_stp_get_reserved_memory_lk(struct device *dev)
+int gps_stp_get_md_status(struct device *dev)
 {
 	struct device_node *node;
 
 	node = dev->of_node;
 	if (!node) {
-		pr_info("gps_stp_get_reserved_memory_lk: unable to get gps node\n");
+		pr_info("gps_stp_get_md_status: unable to get gps node\n");
 		return -1;
 	}
 
 	if (of_property_read_u32(node, "b13b14-status-addr", &md_status_addr)) {
-		pr_info("gps_stp_get_reserved_memory_lk: unable to get b13b14-status-addr\n");
+		pr_info("gps_stp_get_md_status: unable to get b13b14-status-addr\n");
 		return -1;
 	}
 
-	pr_info("gps_stp_get_reserved_memory_lk md_status_addr 0x%x\n", md_status_addr);
+	pr_info("gps_stp_get_md_status md_status_addr 0x%x\n", md_status_addr);
 
 	return 0;
 
@@ -1260,15 +1262,13 @@ static int GPS_init(void)
 #endif
 #endif
 	int alloc_ret = 0;
-	md_status_addr = 0;
-
-	/*ExtB P220930-01579 add for  CAIC jinzhao 20221014*/
-	md_status_addr = 0;
-
+#ifdef MTK_GENERIC_HAL
+	gps_lna_linux_plat_drv_register();
+#else
 #ifdef CONFIG_GPS_CTRL_LNA_SUPPORT
 	gps_lna_linux_plat_drv_register();
 #endif
-
+#endif
 	/*static allocate chrdev */
 	alloc_ret = register_chrdev_region(dev, 1, GPS_DRIVER_NAME);
 	if (alloc_ret) {
@@ -1352,8 +1352,7 @@ static int GPS_init(void)
 		goto error;
 	}
 
-	/*ExtB P220930-01579 delete for  CAIC jinzhao 20221014*/
-	// md_status_addr = 0;
+	md_status_addr = 0;
 
 	sema_init(&status_mtx, 1);
 	sema_init(&fwctl_mtx, 1);
@@ -1501,8 +1500,12 @@ static void GPS_exit(void)
 	pr_info("%s driver removed.\n", GPS2_DRIVER_NAME);
 #endif
 #endif
+#ifdef MTK_GENERIC_HAL
+	gps_lna_linux_plat_drv_unregister();
+#else
 #ifdef CONFIG_GPS_CTRL_LNA_SUPPORT
 	gps_lna_linux_plat_drv_unregister();
+#endif
 #endif
 	wakeup_source_unregister(gps_wake_lock_ptr);
 #ifdef MTK_GENERIC_HAL
@@ -1535,6 +1538,9 @@ static int __init gps_mod_init(void)
 	#ifdef CONFIG_MTK_GPS_EMI
 	mtk_gps_emi_init();
 	#endif
+	#ifdef CONFIG_MTK_CONNSYS_DEDICATED_LOG_PATH
+	mtk_gps_fw_log_init();
+	#endif
 	return ret;
 }
 
@@ -1544,6 +1550,9 @@ static void __exit gps_mod_exit(void)
 	mtk_wcn_stpgps_drv_exit();
 	#ifdef CONFIG_MTK_GPS_EMI
 	mtk_gps_emi_exit();
+	#endif
+	#ifdef CONFIG_MTK_CONNSYS_DEDICATED_LOG_PATH
+	mtk_gps_fw_log_exit();
 	#endif
 }
 

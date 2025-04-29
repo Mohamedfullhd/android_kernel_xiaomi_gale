@@ -115,10 +115,6 @@
 			       RST_FLAG_DO_WHOLE_RESET)
 #define RST_FLAG_WF_RESET  (RST_FLAG_DO_CORE_DUMP | RST_FLAG_PREVENT_POWER_OFF)
 #endif
-
-#if CFG_TC10_FEATURE
-#define RST_REPORT_DATA_MAX_LEN 512
-#endif
 /*******************************************************************************
  *                             D A T A   T Y P E S
  *******************************************************************************
@@ -151,7 +147,6 @@ enum _ENUM_CHIP_RESET_REASON_TYPE_T {
 	RST_WHOLE_CHIP_TRIGGER,
 	RST_MDDP_MD_TRIGGER_EXCEPTION,
 	RST_FWK_TRIGGER,
-	RST_SCN_TRIGGER,
 	RST_REASON_MAX
 };
 
@@ -217,8 +212,7 @@ enum ENUM_WF_RST_SOURCE {
 #if CFG_WMT_RESET_API_SUPPORT
 extern int wifi_reset_start(void);
 extern int wifi_reset_end(enum ENUM_RESET_STATUS);
-extern int mtk_wcn_get_host_assert_info(unsigned int *type,
-	unsigned int *reason, unsigned int *en);
+
 #if (CFG_SUPPORT_CONNINFRA == 1)
 extern int hifAxiRemove(void);
 extern void kalSetRstEvent(void);
@@ -245,8 +239,6 @@ extern u_int8_t fgIsResetHangState;
 #endif
 
 #endif
-
-extern uint32_t g_u4Memdump;
 /*******************************************************************************
  *                           P R I V A T E   D A T A
  *******************************************************************************
@@ -258,7 +250,7 @@ extern uint32_t g_u4Memdump;
 #define GL_COREDUMP_TRIGGER(_prAdapter)	\
 { \
 	wlanoidSerExtCmd(_prAdapter, SER_ACTION_RECOVER, \
-					SER_SET_L0_RECOVER, 0, FALSE); \
+					SER_SET_L0_RECOVER, 0); \
 }
 
 #if CFG_CHIP_RESET_SUPPORT
@@ -313,6 +305,8 @@ void glResetInit(struct GLUE_INFO *prGlueInfo);
 void glResetUninit(void);
 
 void glSendResetRequest(void);
+
+void glResetWholeChipResetTrigger(char *pcReason);
 
 u_int8_t glResetTrigger(struct ADAPTER *prAdapter,
 			uint32_t u4RstFlag, const uint8_t *pucFile,

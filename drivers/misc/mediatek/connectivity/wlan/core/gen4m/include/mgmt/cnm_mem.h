@@ -382,10 +382,13 @@ struct STA_RECORD {
 	uint8_t ucHePhyCapInfo[HE_PHY_CAP_BYTE_NUM];
 
 	uint16_t u2HeRxMcsMapBW80;
+	uint16_t u2HeRxMcsMapBW80Assoc;
 	uint16_t u2HeTxMcsMapBW80;
 	uint16_t u2HeRxMcsMapBW160;
+	uint16_t u2HeRxMcsMapBW160Assoc;
 	uint16_t u2HeTxMcsMapBW160;
 	uint16_t u2HeRxMcsMapBW80P80;
+	uint16_t u2HeRxMcsMapBW80P80Assoc;
 	uint16_t u2HeTxMcsMapBW80P80;
 #endif
 #if (CFG_SUPPORT_802_11BE == 1)
@@ -726,8 +729,6 @@ struct STA_RECORD {
 #if CFG_SUPPORT_802_11W
 	/* AP PMF */
 	struct STA_PMF_CFG rPmfCfg;
-	/* STA PMF */
-	uint32_t u4assocComeBackTime;
 #endif
 #if DSCP_SUPPORT
 	uint8_t  qosMapSet[64];
@@ -742,13 +743,7 @@ struct STA_RECORD {
 #endif
 
 	u_int8_t fgSupportBTM; /* Indicates whether to support BTM */
-#if CFG_TC10_FEATURE
-	u_int8_t fgSupportProxyARP;
-	u_int8_t fgSupportTFS;
-	u_int8_t fgSupportWNMSleep;
-	u_int8_t fgSupportTIMBcast;
-	u_int8_t fgSupportDMS;
-#endif
+
 	/*
 	 * Flag used to record the connected status of upper layer.
 	 * Indicate connected status only when disconnected, and only
@@ -798,10 +793,6 @@ struct STA_RECORD {
 	u_int8_t fgIsMscsSupported;
 	struct LINK rMscsMonitorList;
 	struct LINK rMscsTcpMonitorList;
-	u_int8_t fgIsEapEncrypt;
-#if CFG_TC10_FEATURE
-	u_int8_t ucSupportedBand;
-#endif
 };
 
 #if 0
@@ -1082,7 +1073,6 @@ struct MEM_TRACK {
 	struct LINK_ENTRY rLinkEntry;
 	uint16_t u2CmdIdAndWhere;
 	uint8_t *pucFileAndLine;
-	uint8_t aucData[];
 };
 #endif
 /*******************************************************************************

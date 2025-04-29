@@ -24,7 +24,7 @@
 /* Buffer size to generate NAN attribute */
 #define NAN_IE_BUF_MAX_SIZE 1000
 
-/* Memory leak issue, use global array to alloc buffer for kde/mic */
+/* Memory leak issue, use golbal array to alloc buffer for kde/mic */
 #define NAN_KDE_ATTR_BUF_SIZE 150
 #define NAN_MIC_BUF_SIZE 350
 
@@ -38,7 +38,8 @@
 #define NAN_MAX_SERVICE_SPECIFIC_INFO_LEN 255
 #define NAN_MAX_SDEA_SERVICE_SPECIFIC_INFO_LEN 255
 
-#define NAN_FW_MAX_MATCH_FILTER_LEN 255
+#define NAN_FW_MAX_SERVICE_NAME_LEN 32
+#define NAN_FW_MAX_MATCH_FILTER_LEN 64
 #define NAN_FW_MAX_SERVICE_SPECIFIC_INFO_LEN 255
 #define NAN_FW_MAX_SCID_BUF_LEN 128
 #define NAN_FW_MAX_SDEA_SERVICE_SPECIFIC_INFO_LEN 255
@@ -47,7 +48,7 @@
 #define NAN_MAX_MESH_DATA_LEN 32
 #define NAN_MAX_INFRA_DATA_LEN 32
 #define NAN_MAX_CLUSTER_ATTRIBUTE_LEN 255
-#define NAN_MAX_SUBSCRIBE_MAX_ADDRESS 20
+#define NAN_MAX_SUBSCRIBE_MAX_ADDRESS 42
 #define NAN_MAX_FAM_CHANNELS 32
 #define NAN_MAX_POSTDISCOVERY_LEN 5
 #define NAN_MAX_FRAME_DATA_LEN 504
@@ -64,11 +65,7 @@
 /*Max publish + subscribe numbers 4*/
 #define NAN_MAX_PUBLISH_NUM 2
 #define NAN_MAX_SUBSCRIBE_NUM 2
-#if (CFG_SUPPORT_NAN_DBDC == 1)
-#define NAN_MAX_NDP_SESSIONS 5
-#else
-#define NAN_MAX_NDP_SESSIONS 2
-#endif
+#define NAN_MAX_NDP_SESSIONS 8
 #define IPV6MACLEN 8
 
 /* NAN Shared Key Security Cipher Suites Mask */
@@ -88,7 +85,7 @@
 
 enum NAN_BSS_ROLE_INDEX {
 	NAN_BSS_INDEX_BAND0 = 0,
-#if (CFG_SUPPORT_NAN_DBDC == 1)
+#if (CFG_SUPPORT_DBDC == 1)
 	NAN_BSS_INDEX_BAND1,
 #endif
 	NAN_BSS_INDEX_NUM
@@ -322,7 +319,6 @@ enum NanDeviceRole {
 	NAN_P2P_OPER_CLI = 4
 };
 
-__KAL_ATTRIB_PACKED_FRONT__
 struct NanSecurityPmk {
 	/* pmk length */
 	uint32_t pmk_len;
@@ -334,7 +330,6 @@ struct NanSecurityPmk {
 	uint8_t pmk[NAN_PMK_INFO_LEN];
 } __KAL_ATTRIB_PACKED__;
 
-__KAL_ATTRIB_PACKED_FRONT__
 struct NanSecurityPassPhrase {
 	/* passphrase length */
 	uint32_t passphrase_len;
@@ -346,7 +341,6 @@ struct NanSecurityPassPhrase {
 	uint8_t passphrase[NAN_SECURITY_MAX_PASSPHRASE_LEN];
 } __KAL_ATTRIB_PACKED__;
 
-__KAL_ATTRIB_PACKED_FRONT__
 struct NanSecurityKeyInfo {
 	enum NanSecurityKeyInputType key_type;
 
@@ -360,7 +354,6 @@ struct NanSecurityKeyInfo {
  * Attribute (SDEA) passed as part of NanPublishRequest/
  * NanSubscribeRequest/NanMatchInd.
  */
-__KAL_ATTRIB_PACKED_FRONT__
 struct NanSdeaCtrlParams {
 	/* Optional configuration of Data Path Enable request.
 	 * configure flag determines whether configuration needs
@@ -370,7 +363,7 @@ struct NanSdeaCtrlParams {
 
 	enum NdpType ndp_type;
 
-	/* NAN security required flag to indicate
+	/* NAN secuirty required flag to indicate
 	 * if the security is enabled or disabled
 	 */
 	enum NanDataPathSecurityCfgStatus security_cfg;
@@ -395,7 +388,6 @@ struct NanSdeaCtrlParams {
 } __KAL_ATTRIB_PACKED__;
 
 /* Nan Ranging Peer Info in MatchInd */
-__KAL_ATTRIB_PACKED_FRONT__
 struct NanRangeInfo {
 	/* Distance to the NAN device with the MAC address indicated
 	 * with ranged mac address.
@@ -408,7 +400,6 @@ struct NanRangeInfo {
 } __KAL_ATTRIB_PACKED__;
 
 /* Response control parameters */
-__KAL_ATTRIB_PACKED_FRONT__
 struct NanRangeResponseCtl {
 	/* Enable/disable NAN serivce Ranging auto response mode */
 	enum NanRangingAutoResponse ranging_auto_response;
@@ -423,7 +414,6 @@ struct NanRangeResponseCtl {
 } __KAL_ATTRIB_PACKED__;
 
 /* NAN FTM Parameters */
-__KAL_ATTRIB_PACKED_FRONT__
 struct NanRangeRequestFtmCfg {
 	uint8_t max_burst_duration;
 	uint8_t min_delta_ftm;
@@ -434,7 +424,6 @@ struct NanRangeRequestFtmCfg {
 /* Configuration parameters received from the
  * Ranging Request frame
  */
-__KAL_ATTRIB_PACKED_FRONT__
 struct NanRangeRequestCfg {
 	/* Ranging Report is required by the Responder */
 	enum NanRangeReport range_report;
@@ -444,7 +433,6 @@ struct NanRangeRequestCfg {
 } __KAL_ATTRIB_PACKED__;
 
 /* Nan/NDP Capabilities info */
-__KAL_ATTRIB_PACKED_FRONT__
 struct NanCapabilities {
 	uint32_t max_concurrent_nan_clusters;
 	uint32_t max_publishes;
@@ -472,7 +460,6 @@ struct NanCapabilities {
  * enclose in Beacons and/or Service Discovery frames transmitted.
  * Below structure is used to populate that.
  */
-__KAL_ATTRIB_PACKED_FRONT__
 struct NanTransmitVendorSpecificAttribute {
 	/* 0 = transmit only in the next discovery window
 	 * 1 = transmit in next 16 discovery window
@@ -499,7 +486,6 @@ struct NanTransmitVendorSpecificAttribute {
 /* Discovery Engine will forward any Vendor Specific Attributes
  * which it received as part of this structure.
  */
-__KAL_ATTRIB_PACKED_FRONT__
 struct NanReceiveVendorSpecificAttribute {
 	/* Frames on which this vendor specific attribute
 	 * was received. Mask defined above
@@ -519,7 +505,6 @@ struct NanReceiveVendorSpecificAttribute {
  * Discovery engine sends the details of received Beacon or
  * Service Discovery Frames as part of this structure.
  */
-__KAL_ATTRIB_PACKED_FRONT__
 struct NanBeaconSdfPayloadReceive {
 	/* Frame data */
 	uint32_t frame_len;
@@ -530,7 +515,6 @@ struct NanBeaconSdfPayloadReceive {
 /* Structure to set the Social Channel Scan parameters
  * passed as part of NanEnableRequest/NanConfigRequest
  */
-__KAL_ATTRIB_PACKED_FRONT__
 struct NanSocialChannelScanParams {
 	/* Dwell time of each social channel in milliseconds
 	 * NanChannelIndex corresponds to the respective channel
@@ -549,7 +533,6 @@ struct NanSocialChannelScanParams {
  * to be included in Service Discovery frames transmitted
  * as part of this structure.
  */
-__KAL_ATTRIB_PACKED_FRONT__
 struct NanTransmitPostConnectivityCapability {
 	/* 0 = transmit only in the next discovery window
 	 * 1 = transmit in next 16 discovery window
@@ -576,7 +559,6 @@ struct NanTransmitPostConnectivityCapability {
  *  Discovery engine providing the post connectivity capability
  *  received.
  */
-__KAL_ATTRIB_PACKED_FRONT__
 struct NanReceivePostConnectivityCapability {
 	/* 1 - Wifi Direct supported 0 - Not supported */
 	uint8_t is_wfd_supported;
@@ -597,7 +579,6 @@ struct NanReceivePostConnectivityCapability {
 } __KAL_ATTRIB_PACKED__;
 
 /* Further availability per channel information */
-__KAL_ATTRIB_PACKED_FRONT__
 struct NanFurtherAvailabilityChannel {
 	/* Defined above */
 	enum NanAvailDuration entry_control;
@@ -647,7 +628,6 @@ struct NanFurtherAvailabilityChannel {
 /* Further availability map which can be sent and received from
  * Discovery engine
  */
-__KAL_ATTRIB_PACKED_FRONT__
 struct NanFurtherAvailabilityMap {
 	/* Number of channels indicates the number of channel
 	 * entries which is part of fam
@@ -658,7 +638,6 @@ struct NanFurtherAvailabilityMap {
 } __KAL_ATTRIB_PACKED__;
 
 /* Configuration params of NAN Ranging */
-__KAL_ATTRIB_PACKED_FRONT__
 struct NanRangingCfg {
 	/* Determine the accuracy required from the ranging */
 	uint32_t ranging_resolution;
@@ -687,7 +666,6 @@ struct NanRangingCfg {
 } __KAL_ATTRIB_PACKED__;
 
 /* NAN Ranging request's response */
-__KAL_ATTRIB_PACKED_FRONT__
 struct NanRangeResponseCfg {
 	/* Publish Id of an earlier Publisher */
 	uint16_t publish_id;
@@ -705,7 +683,6 @@ struct NanRangeResponseCfg {
 } __KAL_ATTRIB_PACKED__;
 
 /* Structure of Post NAN Discovery attribute */
-__KAL_ATTRIB_PACKED_FRONT__
 struct NanTransmitPostDiscovery {
 	/* Connection type of the host */
 	enum NanConnectionType type;
@@ -760,7 +737,6 @@ struct NanTransmitPostDiscovery {
 } __KAL_ATTRIB_PACKED__;
 
 /* Discovery engine providing the structure of Post NAN Discovery */
-__KAL_ATTRIB_PACKED_FRONT__
 struct NanReceivePostDiscovery {
 	/* Connection type of the host */
 	enum NanConnectionType type;
@@ -815,7 +791,6 @@ struct NanReceivePostDiscovery {
 /* NAN device level configuration of SDF and Sync beacons in both
  * 2.4/5GHz bands
  */
-__KAL_ATTRIB_PACKED_FRONT__
 struct NanConfigDW {
 	/* Configure 2.4GHz DW Band */
 	uint8_t config_2dot4g_dw_band;
@@ -843,7 +818,6 @@ struct NanConfigDW {
  * The NanEnableReq message instructs the Discovery Engine to enter an
  * operational state
  */
-__KAL_ATTRIB_PACKED_FRONT__
 struct NanEnableRequest {
 	/* Mandatory parameters below */
 	uint8_t master_pref;
@@ -1017,7 +991,6 @@ struct NanEnableRequest {
 	uint32_t subscribe_sid_beacon_val;
 } __KAL_ATTRIB_PACKED__;
 
-__KAL_ATTRIB_PACKED_FRONT__
 struct NanDataReqReceive {
 	uint8_t ndpid;
 	uint8_t initiator_data_addr[NAN_MAC_ADDR_LEN];
@@ -1027,7 +1000,6 @@ struct NanDataReqReceive {
  * Message is used to request the DE to publish the Service Name
  * using the parameters passed into the Discovery Window
  */
-__KAL_ATTRIB_PACKED_FRONT__
 struct NanPublishRequest {
 	/* id  0 means new publish, any other id is existing publish */
 	uint16_t publish_id;
@@ -1052,7 +1024,7 @@ struct NanPublishRequest {
 	/* length of service name */
 	uint16_t service_name_len;
 	/* UTF-8 encoded string identifying the service */
-	uint8_t service_name[NAN_MAX_SERVICE_NAME_LEN];
+	uint8_t service_name[NAN_FW_MAX_SERVICE_NAME_LEN];
 
 	/* Field which specifies how the matching indication to host is
 	 * controlled.
@@ -1166,7 +1138,6 @@ struct NanPublishRequest {
  * The PublishServiceCancelReq Message is used to request the DE to stop
  * publishing the Service Name identified by the Publish Id in the message.
  */
-__KAL_ATTRIB_PACKED_FRONT__
 struct NanPublishCancelRequest {
 	uint16_t publish_id;
 } __KAL_ATTRIB_PACKED__;
@@ -1175,7 +1146,6 @@ struct NanPublishCancelRequest {
  * The SubscribeServiceReq message is sent to the Discovery Engine
  * whenever the Upper layers would like to listen for a Service Name
  */
-__KAL_ATTRIB_PACKED_FRONT__
 struct NanSubscribeRequest {
 	/* id 0 means new subscribe, non zero is existing subscribe */
 	uint16_t subscribe_id;
@@ -1239,7 +1209,7 @@ struct NanSubscribeRequest {
 	/* length of service name */
 	uint16_t service_name_len;
 	/* UTF-8 encoded string identifying the service */
-	uint8_t service_name[NAN_MAX_SERVICE_NAME_LEN];
+	uint8_t service_name[NAN_FW_MAX_SERVICE_NAME_LEN];
 
 	/* Sequence of values which further specify the published service
 	 * beyond the service name
@@ -1339,7 +1309,6 @@ struct NanSubscribeRequest {
  * The SubscribeCancelReq Message is used to request the DE to stop looking for
  * the Service Name.
  */
-__KAL_ATTRIB_PACKED_FRONT__
 struct NanSubscribeCancelRequest {
 	uint16_t subscribe_id;
 } __KAL_ATTRIB_PACKED__;
@@ -1348,7 +1317,6 @@ struct NanSubscribeCancelRequest {
  * The TransmitFollowupReq message is sent to the DE to allow the sending of
  * the Service_Specific_Info to a particular MAC address.
  */
-__KAL_ATTRIB_PACKED_FRONT__
 struct NanTransmitFollowupRequest {
 	/* Publish or Subscribe Id of an earlier Publish/Subscribe */
 	uint16_t publish_subscribe_id;
@@ -1357,7 +1325,6 @@ struct NanTransmitFollowupRequest {
 	 * part of earlier MatchInd/FollowupInd message.
 	 */
 	uint32_t requestor_instance_id;
-	uint16_t transaction_id;
 	/* Unicast address */
 	uint8_t addr[NAN_MAC_ADDR_LEN];
 	/* priority of the request 2=high */
@@ -1385,7 +1352,6 @@ struct NanTransmitFollowupRequest {
  * The Discovery Engine can be queried at runtime by the Host processor for
  * statistics concerning various parts of the Discovery Engine.
  */
-__KAL_ATTRIB_PACKED_FRONT__
 struct NanStatsRequest {
 	/* NAN Statistics Request Type */
 	enum NanStatsType stats_type;
@@ -1400,7 +1366,6 @@ struct NanStatsRequest {
  * The NanConfigurationReq message is sent by the Host to the
  * Discovery Engine in order to configure the Discovery Engine during runtime.
  */
-__KAL_ATTRIB_PACKED_FRONT__
 struct NanConfigRequest {
 	uint8_t config_sid_beacon;
 	uint8_t sid_beacon;
@@ -1497,7 +1462,6 @@ struct NanConfigRequest {
  * as part of
  * beacon or service discovery frame transmitted as part of this request..
  */
-__KAL_ATTRIB_PACKED_FRONT__
 struct NanBeaconSdfPayloadRequest {
 	/* NanVendorAttribute will have the Vendor Specific Attribute which the
 	 * vendor wants to publish as part of Discovery or Sync or
@@ -1507,7 +1471,6 @@ struct NanBeaconSdfPayloadRequest {
 } __KAL_ATTRIB_PACKED__;
 
 /* Publish statistics. */
-__KAL_ATTRIB_PACKED_FRONT__
 struct NanPublishStats {
 	uint32_t validPublishServiceReqMsgs;
 	uint32_t validPublishServiceRspMsgs;
@@ -1529,7 +1492,6 @@ struct NanPublishStats {
 } __KAL_ATTRIB_PACKED__;
 
 /* Subscribe statistics. */
-__KAL_ATTRIB_PACKED_FRONT__
 struct NanSubscribeStats {
 	uint32_t validSubscribeServiceReqMsgs;
 	uint32_t validSubscribeServiceRspMsgs;
@@ -1554,7 +1516,6 @@ struct NanSubscribeStats {
 } __KAL_ATTRIB_PACKED__;
 
 /* NAN DW Statistics*/
-__KAL_ATTRIB_PACKED_FRONT__
 struct NanDWStats {
 	/* RX stats */
 	uint32_t validFrames;
@@ -1583,7 +1544,6 @@ struct NanDWStats {
 } __KAL_ATTRIB_PACKED__;
 
 /* NAN MAC Statistics. */
-__KAL_ATTRIB_PACKED_FRONT__
 struct NanMacStats {
 	/* RX stats */
 	uint32_t validFrames;
@@ -1620,7 +1580,6 @@ struct NanMacStats {
 /* Fixme, add padding for 4-byte alignment */
 
 /* NAN Sync Statistics*/
-__KAL_ATTRIB_PACKED_FRONT__
 struct NanSyncStats {
 	unsigned long long currTsf;
 	unsigned long long myRank;
@@ -1666,7 +1625,6 @@ struct NanSyncStats {
 } __KAL_ATTRIB_PACKED__;
 
 /* NAN Misc DE Statistics */
-__KAL_ATTRIB_PACKED_FRONT__
 struct NanDeStats {
 	uint32_t validErrorRspMsgs;
 	uint32_t validTransmitFollowupReqMsgs;
@@ -1694,13 +1652,11 @@ struct NanDeStats {
 } __KAL_ATTRIB_PACKED__;
 
 /* Publish Response Message structure */
-__KAL_ATTRIB_PACKED_FRONT__
 struct NanPublishResponse {
 	uint16_t publish_id;
 } __KAL_ATTRIB_PACKED__;
 
 /* Subscribe Response Message structure */
-__KAL_ATTRIB_PACKED_FRONT__
 struct NanSubscribeResponse {
 	uint16_t subscribe_id;
 } __KAL_ATTRIB_PACKED__;
@@ -1708,7 +1664,6 @@ struct NanSubscribeResponse {
 /* Stats Response Message structure
  * The Discovery Engine response to a request by the Host for statistics.
  */
-__KAL_ATTRIB_PACKED_FRONT__
 struct NanStatsResponse {
 	enum NanStatsType stats_type;
 	union {
@@ -1722,7 +1677,6 @@ struct NanStatsResponse {
 } __KAL_ATTRIB_PACKED__;
 
 /* Response returned for Initiators Data request */
-__KAL_ATTRIB_PACKED_FRONT__
 struct NanDataPathRequestResponse {
 	/* Unique token Id generated on the initiator
 	 * side used for a NDP session between two NAN devices
@@ -1735,7 +1689,6 @@ struct NanDataPathRequestResponse {
  * received over the air and it matches a Solicited PublishServiceReq which had
  * been created with the replied_event_flag set.
  */
-__KAL_ATTRIB_PACKED_FRONT__
 struct NanPublishRepliedInd {
 	uint8_t eventID;
 	/* A 32 bit Requestor Instance Id which is sent to the Application.
@@ -1755,7 +1708,6 @@ struct NanPublishRepliedInd {
  * The PublishTerminatedInd message is sent by the DE whenever a Publish
  * terminates from a user-specified timeout or a unrecoverable error in the DE.
  */
-__KAL_ATTRIB_PACKED_FRONT__
 struct NanPublishTerminatedInd {
 	uint8_t eventID;
 	/* Id returned during the initial Publish */
@@ -1773,7 +1725,6 @@ struct NanPublishTerminatedInd {
  * the Discovery Engine detects a match for a previous SubscribeServiceReq
  * or PublishServiceReq.
  */
-__KAL_ATTRIB_PACKED_FRONT__
 struct NanMatchInd {
 	uint8_t eventID;
 	/* Publish or Subscribe Id of an earlier Publish/Subscribe */
@@ -1891,7 +1842,6 @@ struct NanMatchInd {
  * MatchInd message for this Publish/Subscribe Id had the out_of_resource_flag
  * set then this message will not be received
  */
-__KAL_ATTRIB_PACKED_FRONT__
 struct NanMatchExpiredInd {
 	uint8_t eventID;
 	/* Publish or Subscribe Id of an earlier Publish/Subscribe */
@@ -1907,7 +1857,6 @@ struct NanMatchExpiredInd {
  * Subscribe terminates from a user-specified timeout or a unrecoverable error
  * in the DE.
  */
-__KAL_ATTRIB_PACKED_FRONT__
 struct NanSubscribeTerminatedInd {
 	uint8_t eventID;
 	/* Id returned during initial Subscribe */
@@ -1924,7 +1873,6 @@ struct NanSubscribeTerminatedInd {
  * The FollowupInd message is sent by the DE to the Host whenever it receives a
  * Followup message from another peer.
  */
-__KAL_ATTRIB_PACKED_FRONT__
 struct NanFollowupInd {
 	uint8_t eventID;
 	/* Publish or Subscribe Id of an earlier Publish/Subscribe */
@@ -1954,7 +1902,6 @@ struct NanFollowupInd {
 /* Event data notifying the Mac address of the Discovery engine.
  * which is reported as one of the Discovery engine event
  */
-__KAL_ATTRIB_PACKED_FRONT__
 struct NanMacAddressEvent {
 	uint8_t addr[NAN_MAC_ADDR_LEN];
 } __KAL_ATTRIB_PACKED__;
@@ -1962,7 +1909,6 @@ struct NanMacAddressEvent {
 /* Event data notifying the Cluster address of the cluster
  * which is reported as one of the Discovery engine event
  */
-__KAL_ATTRIB_PACKED_FRONT__
 struct NanClusterEvent {
 	uint8_t addr[NAN_MAC_ADDR_LEN];
 } __KAL_ATTRIB_PACKED__;
@@ -1973,7 +1919,6 @@ struct NanClusterEvent {
  * In other words, each new event defined will carry a different
  * structure of information back to the host.
  */
-__KAL_ATTRIB_PACKED_FRONT__
 struct NanDiscEngEventInd {
 	uint8_t eventID;
 	/* NAN Protocol Event Codes */
@@ -2000,7 +1945,6 @@ struct NanDiscEngEventInd {
  * it was part of and will have terminated
  * any in progress Publishes or Subscribes.
  */
-__KAL_ATTRIB_PACKED_FRONT__
 struct NanDisabledInd {
 	uint8_t eventID;
 	/* Following reasons expected:
@@ -2018,7 +1962,6 @@ struct NanDisabledInd {
  * elements were received either in a Beacon or SDF which needs to be delivered
  * outside of a Publish/Subscribe Handle.
  */
-__KAL_ATTRIB_PACKED_FRONT__
 struct NanBeaconSdfPayloadInd {
 	uint8_t eventID;
 	/* The MAC address of the peer which sent the attributes. */
@@ -2038,7 +1981,6 @@ struct NanBeaconSdfPayloadInd {
 /* Event Indication notifying the
  * transmit followup in progress
  */
-__KAL_ATTRIB_PACKED_FRONT__
 struct NanTransmitFollowupInd {
 	uint8_t eventID;
 	uint16_t id;
@@ -2055,14 +1997,12 @@ struct NanTransmitFollowupInd {
 /* Data request Initiator/Responder
  * app/service related info
  */
-__KAL_ATTRIB_PACKED_FRONT__
 struct NanDataPathAppInfo {
 	uint16_t ndp_app_info_len;
 	uint8_t ndp_app_info[NAN_DP_MAX_APP_INFO_LEN];
 } __KAL_ATTRIB_PACKED__;
 
 /* Configuration params of Data request Initiator/Responder */
-__KAL_ATTRIB_PACKED_FRONT__
 struct NanDataPathCfg {
 	/* Status Indicating Security/No Security */
 	enum NanDataPathSecurityCfgStatus security_cfg;
@@ -2070,7 +2010,6 @@ struct NanDataPathCfg {
 } __KAL_ATTRIB_PACKED__;
 
 /* Nan Data Path Initiator requesting a data session */
-__KAL_ATTRIB_PACKED_FRONT__
 struct NanDataPathInitiatorRequest {
 	/* Unique Instance Id identifying the Responder's service.
 	 * This is same as publish_id notified on the subscribe side
@@ -2134,7 +2073,6 @@ struct NanDataPathInitiatorRequest {
 	uint16_t u2MaxLatency;
 } __KAL_ATTRIB_PACKED__;
 
-__KAL_ATTRIB_PACKED_FRONT__
 struct NanDataPathInitiatorNDPE {
 	bool fgEnNDPE;
 	uint8_t ucNDPEAttrPresent;
@@ -2143,7 +2081,6 @@ struct NanDataPathInitiatorNDPE {
 /* Data struct to initiate a data response on the responder side
  * for an indication received with a data request
  */
-__KAL_ATTRIB_PACKED_FRONT__
 struct NanDataPathIndicationResponse {
 	/* Unique token Id generated on the initiator/responder
 	 * side used for a NDP session between two NAN devices
@@ -2205,7 +2142,6 @@ struct NanDataPathIndicationResponse {
 } __KAL_ATTRIB_PACKED__;
 
 /* NDP termination info */
-__KAL_ATTRIB_PACKED_FRONT__
 struct NanDataPathEndRequest {
 	/* UINT_8 num_ndp_instances; */
 
@@ -2224,7 +2160,6 @@ struct NanDataPathEndRequest {
  * responder side when a Nan Data request or
  * NDP session is initiated on the Initiator side
  */
-__KAL_ATTRIB_PACKED_FRONT__
 struct NanDataPathRequestInd {
 	uint8_t eventID;
 	/* Unique Instance Id corresponding to a service/session.
@@ -2251,7 +2186,6 @@ struct NanDataPathRequestInd {
 /* Event indication of data confirm is received on both
  * initiator and responder side confirming a NDP session
  */
-__KAL_ATTRIB_PACKED_FRONT__
 struct NanDataPathConfirmInd {
 	uint8_t eventID;
 	/* Unique token Id generated on the initiator/responder side
@@ -2283,7 +2217,6 @@ struct NanDataPathConfirmInd {
  * initiator/responder side terminating
  * a NDP session
  */
-__KAL_ATTRIB_PACKED_FRONT__
 struct NanDataPathEndInd {
 	uint8_t eventID;
 	uint8_t num_ndp_instances;
@@ -2296,7 +2229,6 @@ struct NanDataPathEndInd {
 /* Event indicating Range Request received on the
  * Published side.
  */
-__KAL_ATTRIB_PACKED_FRONT__
 struct NanRangeRequestInd {
 	uint8_t eventID;
 	uint16_t publish_id; /* id is existing publish */
@@ -2309,7 +2241,6 @@ struct NanRangeRequestInd {
 /* Event indicating Range report on the
  * Published side.
  */
-__KAL_ATTRIB_PACKED_FRONT__
 struct NanRangeReportInd {
 	uint8_t eventID;
 	/* id is existing publish */
@@ -2330,7 +2261,6 @@ struct NanRangeReportInd {
  * The message is sent to the Ranging Engine
  * whenever the Upper layers would like to invoke a ranging service
  */
-__KAL_ATTRIB_PACKED_FRONT__
 struct NanRangeRequest {
 	/* A handle uniquely identifying a ranging */
 	uint16_t range_id;
@@ -2343,7 +2273,6 @@ struct NanRangeRequest {
 /* NAN Range Cancel Structure
  * The message is used to request the Ranging engine to stop a session.
  */
-__KAL_ATTRIB_PACKED_FRONT__
 struct NanRangeCancelRequest {
 	/* A handle uniquely identifying a ranging */
 	uint8_t peer_addr[NAN_MAC_ADDR_LEN];
@@ -2353,7 +2282,6 @@ struct NanRangeCancelRequest {
  * The message is sent to initiate a range response
  * for an indication received with a range request
  */
-__KAL_ATTRIB_PACKED_FRONT__
 struct NanRangeResponse {
 	/* A handle uniquely identifying a ranging */
 	uint16_t range_id;

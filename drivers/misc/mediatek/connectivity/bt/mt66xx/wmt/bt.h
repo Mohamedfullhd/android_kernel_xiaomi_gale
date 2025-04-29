@@ -43,51 +43,19 @@
 #define BT_LOG_ERR              1
 #define RAW_MAX_BYTES           30
 
-#ifndef CFG_DISABLE_BT_LOG
-#define CFG_DISABLE_BT_LOG	1
-#endif
-
 static uint8_t raw_buf[RAW_MAX_BYTES * 5 + 10];
 extern UINT32 gBtDbgLevel;
 
-#ifndef CONFIG_MTK_CONNECTIVITY_LOG
-#define BT_LOG_PRT_DBG(fmt, arg...)
-#define BT_LOG_PRT_INFO(fmt, arg...)
-#define BT_LOG_PRT_WARN(fmt, arg...)
-#define BT_LOG_PRT_ERR(fmt, arg...)
-#define BT_LOG_PRT_INFO_RATELIMITED(fmt, arg...)
-#define BT_LOG_PRT_DBG_RAW(p, l, fmt, ...)
-#define BT_LOG_PRT_INFO_RAW(p, l, fmt, ...)
-#else
 #define BT_LOG_PRT_DBG(fmt, arg...)	\
-	do {	\
-		if (gBtDbgLevel >= BT_LOG_DBG)	\
-			pr_info(PFX "%s: " fmt, __func__, ##arg);	\
-	} while (0)
-
+	do { if (gBtDbgLevel >= BT_LOG_DBG) pr_info(PFX "%s: " fmt, __func__, ##arg); } while (0)
 #define BT_LOG_PRT_INFO(fmt, arg...)	\
-	do {	\
-		if (gBtDbgLevel >= BT_LOG_INFO)	\
-			pr_info(PFX "%s: " fmt, __func__, ##arg);	\
-	} while (0)
-
+	do { if (gBtDbgLevel >= BT_LOG_INFO) pr_info(PFX "%s: " fmt, __func__, ##arg); } while (0)
 #define BT_LOG_PRT_WARN(fmt, arg...)	\
-	do {	\
-		if (gBtDbgLevel >= BT_LOG_WARN)	\
-			pr_info(PFX "%s: " fmt, __func__, ##arg);	\
-	} while (0)
-
+	do { if (gBtDbgLevel >= BT_LOG_WARN) pr_info(PFX "%s: " fmt, __func__, ##arg); } while (0)
 #define BT_LOG_PRT_ERR(fmt, arg...)	\
-	do {	\
-		if (gBtDbgLevel >= BT_LOG_ERR)	\
-			pr_info(PFX "%s: " fmt, __func__, ##arg);	\
-	} while (0)
-	
+	do { if (gBtDbgLevel >= BT_LOG_ERR) pr_info(PFX "%s: " fmt, __func__, ##arg); } while (0)
 #define BT_LOG_PRT_INFO_RATELIMITED(fmt, arg...)	\
-	do {	\
-		if (gBtDbgLevel >= BT_LOG_ERR)	\
-			pr_info_ratelimited(PFX "%s: " fmt, __func__, ##arg);	\
-	} while (0)
+	do { if (gBtDbgLevel >= BT_LOG_ERR) pr_info_ratelimited(PFX "%s: " fmt, __func__, ##arg); } while (0)
 
 #define BT_LOG_PRT_DBG_RAW(p, l, fmt, ...)						\
 			do {	\
@@ -130,7 +98,6 @@ extern UINT32 gBtDbgLevel;
 				}	\
 			}	\
 		} while (0)
-#endif
 
 struct bt_dbg_st {
 	bool trx_enable;
@@ -152,7 +119,13 @@ struct pm_qos_ctrl {
  * BT Logger Tool will send 3 levels(Low, SQC and Debug)
  * Driver will not check its range so we can provide capability of extention.
  ******************************************************************************************/
-#define DEFAULT_LEVEL 0x02 /* 0x00:OFF, 0x01: LOW POWER, 0x02: SQC, 0x03: DEBUG */
+/* 0x00:OFF, 0x01: LOW POWER, 0x02: SQC, 0x03: DEBUG */
+
+#if (FW_LOG_DEFAULT_ON == 0)
+	#define DEFAULT_LEVEL 0x00
+#else
+	#define DEFAULT_LEVEL 0x02
+#endif
 
 extern int  fw_log_bt_init(void);
 extern void fw_log_bt_exit(void);

@@ -1668,7 +1668,7 @@ static VOID stp_sdio_tx_wkr_comp(MTK_WCN_STP_SDIO_HIF_INFO * const p_info)
 
 		idx = p_info->tx_pkt_list.pkt_rd_cnt++ & STP_SDIO_TX_PKT_LIST_SIZE_MASK;
 		p_info->firmware_info.tx_fifo_size += p_info->tx_pkt_list.pkt_size_list[idx];
-		p_info->tx_pkt_list.out_ts[idx] = (UINT32)jiffies;
+		p_info->tx_pkt_list.out_ts[idx] = jiffies;
 		--comp_count;
 	}
 	if (p_info->retry_enable_flag) {
@@ -2041,7 +2041,7 @@ static VOID stp_sdio_tx_wkr(struct work_struct *work)
 			/* record the SDIO packet size in packet size list: using 4-byte aligned length! */
 			idx = p_info->tx_pkt_list.pkt_wr_cnt++ & STP_SDIO_TX_PKT_LIST_SIZE_MASK;
 			p_info->tx_pkt_list.pkt_size_list[idx] = four_byte_align_len;
-			p_info->tx_pkt_list.in_ts[idx] = (UINT32)jiffies;
+			p_info->tx_pkt_list.in_ts[idx] = jiffies;
 			p_info->tx_pkt_list.out_ts[idx] = 0;
 
 			STPSDIO_PR_DBG("wr(0x%x, %ld) rd(0x%x, %ld), tx fifo(size:%d), pkt_num(%d)done\n",

@@ -39,7 +39,11 @@ enum FW_LOG_MODE {
 	LOG_TO_FILE = 1,
 };
 
+#ifdef CONFIG_MTK_CONNSYS_DEDICATED_LOG_PATH
+static atomic_t log_mode  = ATOMIC_INIT(LOG_TO_FILE);
+#else
 static atomic_t log_mode  = ATOMIC_INIT(PRINT_TO_KERNEL_LOG);
+#endif
 
 #define CONNLOG_ALARM_STATE_DISABLE	0x0
 #define CONNLOG_ALARM_STATE_ENABLE	0x01
@@ -254,6 +258,9 @@ static void connlog_ring_emi_to_cache(int conn_type)
 	unsigned int cache_max_size = 0;
 	static DEFINE_RATELIMIT_STATE(_rs, 10 * HZ, 1);
 	static DEFINE_RATELIMIT_STATE(_rs2, HZ, 1);
+
+	ratelimit_set_flags(&_rs, RATELIMIT_MSG_ON_RELEASE);
+	ratelimit_set_flags(&_rs2, RATELIMIT_MSG_ON_RELEASE);
 
 	if (conn_type < 0 || conn_type >= CONNLOG_TYPE_END)
 		return;
@@ -713,6 +720,9 @@ static void connlog_log_data_handler(struct work_struct *work)
 	int module = 0;
 	static DEFINE_RATELIMIT_STATE(_rs, 10 * HZ, 1);
 	static DEFINE_RATELIMIT_STATE(_rs2, 2 * HZ, 1);
+
+	ratelimit_set_flags(&_rs, RATELIMIT_MSG_ON_RELEASE);
+	ratelimit_set_flags(&_rs2, RATELIMIT_MSG_ON_RELEASE);
 
 	do {
 		ret = 0;
@@ -1178,7 +1188,7 @@ ssize_t connsys_log_read(int conn_type, char *buf, size_t count)
 	if (atomic_read(&log_mode) != LOG_TO_FILE)
 		goto done;
 
-	size = (unsigned int)(count < RING_SIZE(ring) ? count : RING_SIZE(ring));
+	size = count < RING_SIZE(ring) ? count : RING_SIZE(ring);
 	if (RING_EMPTY(ring) || !ring_read_prepare(size, &ring_seg, ring)) {
 		pr_err("type(%d) no data, possibly taken by concurrent reader.\n", conn_type);
 		goto done;
@@ -1216,6 +1226,8 @@ ssize_t connsys_log_read_to_user(int conn_type, char __user *buf, size_t count)
 	struct ring_segment ring_seg;
 	struct ring *ring;
 	unsigned int size = 0;
+
+	ratelimit_set_flags(&_rs, RATELIMIT_MSG_ON_RELEASE);
 
 	if (conn_type < 0 || conn_type >= CONNLOG_TYPE_END)
 		return 0;
@@ -1369,7 +1381,6 @@ int connsys_dedicated_log_set_ap_state(int state)
 	}
 
 	EMI_WRITE32(gDev.virAddrEmiLogBase + 32,  state);
-	pr_info("%s state: %d\n", __func__, state);
 	return 0;
 }
 

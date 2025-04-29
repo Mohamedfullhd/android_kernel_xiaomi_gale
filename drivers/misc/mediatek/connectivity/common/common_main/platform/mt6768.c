@@ -40,6 +40,9 @@
 #include <linux/memblock.h>
 #include <linux/platform_device.h>
 #include "connsys_debug_utility.h"
+#ifdef CONFIG_MTK_CONNSYS_DEDICATED_LOG_PATH
+#include "fw_log_wmt.h"
+#endif
 #include "osal_typedef.h"
 #include "mt6768.h"
 #include "mtk_wcn_consys_hw.h"
@@ -160,6 +163,9 @@ static struct regulator *reg_VCN33_BT;
 static struct regulator *reg_VCN33_WIFI;
 #endif
 
+extern int g_mapped_reg_table_sz_mt6768;
+extern REG_MAP_ADDR g_mapped_reg_table_mt6768[];
+
 static EMI_CTRL_STATE_OFFSET mtk_wcn_emi_state_off = {
 	.emi_apmem_ctrl_state = EXP_APMEM_CTRL_STATE,
 	.emi_apmem_ctrl_host_sync_state = EXP_APMEM_CTRL_HOST_SYNC_STATE,
@@ -248,6 +254,9 @@ WMT_CONSYS_IC_OPS consys_ic_ops_mt6768 = {
 
 	.consys_ic_jtag_set_for_mcu = consys_jtag_set_for_mcu,
 	.consys_ic_jtag_flag_ctrl = consys_jtag_flag_ctrl,
+
+	.consys_ic_get_debug_reg_ary_size = &g_mapped_reg_table_sz_mt6768,
+	.consys_ic_get_debug_reg_ary = g_mapped_reg_table_mt6768,
 };
 
 static const struct connlog_emi_config connsys_fw_log_parameter = {
@@ -1269,12 +1278,17 @@ static INT32 consys_dedicated_log_path_init(struct platform_device *pdev)
 	irq_config.irq_callback = NULL;
 
 	connsys_dedicated_log_path_apsoc_init(gConEmiPhyBase, &connsys_fw_log_parameter, &irq_config);
-	
+#ifdef CONFIG_MTK_CONNSYS_DEDICATED_LOG_PATH
+	fw_log_wmt_init();
+#endif
 	return 0;
 }
 
 static VOID consys_dedicated_log_path_deinit(VOID)
 {
+#ifdef CONFIG_MTK_CONNSYS_DEDICATED_LOG_PATH
+	fw_log_wmt_deinit();
+#endif
 	connsys_dedicated_log_path_apsoc_deinit();
 }
 
@@ -1462,10 +1476,6 @@ static INT32 consys_dump_osc_state(P_CONSYS_STATE state)
 
 	CONSYS_REG_WRITE(CONN_CFG_ON_CONN_ON_HOST_MAILBOX_MCU_ADDR, 0x1);
 	CONSYS_REG_WRITE(CONN_CFG_ON_CONN_ON_MON_CTL_ADDR, 0x80000001);
-	CONSYS_REG_WRITE(CONN_CFG_ON_CONN_ON_MON_SEL0_ADDR, 0x03020100);
-	CONSYS_REG_WRITE(CONN_CFG_ON_CONN_ON_MON_SEL1_ADDR, 0x07060504);
-	CONSYS_REG_WRITE(CONN_CFG_ON_CONN_ON_MON_SEL2_ADDR, 0x0b0a0908);
-	CONSYS_REG_WRITE(CONN_CFG_ON_CONN_ON_MON_SEL3_ADDR, 0x0f0e0d0c);
 	CONSYS_REG_WRITE(CONN_CFG_ON_CONN_ON_DBGSEL_ADDR, 0x3);
 	state->lp[0] = (UINT32)CONN_CFG_ON_CONN_ON_MON_FLAG_RECORD_MAPPING_AP_ADDR;
 	state->lp[1] = CONSYS_REG_READ(CONN_CFG_ON_CONN_ON_MON_FLAG_RECORD_ADDR);

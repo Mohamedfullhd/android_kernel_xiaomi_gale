@@ -2026,7 +2026,7 @@ static INT32 mtk_wcn_soc_ver_check(VOID)
 		      hw_ver, fw_ver, p_info->u4HwVer, p_info->cPatchNameExt);
 
 	/* hw id & version */
-	ctrlPa1 = ((UINT32)(wmt_ic_ops_soc.icId << 16)) | (hw_ver & 0x0000FFFF);
+	ctrlPa1 = (wmt_ic_ops_soc.icId << 16) | (hw_ver & 0x0000FFFF);
 	/* translated fw rom version */
 	ctrlPa2 = (fw_ver & 0x0000FFFF);
 
@@ -3270,7 +3270,7 @@ static INT32 mtk_wcn_soc_patch_dwn(UINT32 index)
 		iRet = -1;
 		goto done;
 	}
-	patchSize -= (UINT32)sizeof(WMT_PATCH);
+	patchSize -= sizeof(WMT_PATCH);
 	pPatchBuf += sizeof(WMT_PATCH);
 
 	if (wmt_ic_ops_soc.options & OPT_PATCH_CHECKSUM) {

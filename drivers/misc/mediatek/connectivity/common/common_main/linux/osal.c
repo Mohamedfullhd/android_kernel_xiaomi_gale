@@ -394,7 +394,7 @@ INT32 osal_thread_stop(P_OSAL_THREAD pThread)
 
 	if ((pThread) && (pThread->pThread)) {
 		iRet = kthread_stop(pThread->pThread);
-		pThread->pThread = NULL;
+		/* pThread->pThread = NULL; */
 		return iRet;
 	}
 	return -1;
@@ -1821,13 +1821,3 @@ VOID osal_op_history_save(struct osal_op_history *log_history, P_OSAL_OP pOp)
 	entry->usec = usec;
 	spin_unlock_irqrestore(&(log_history->lock), flags);
 }
-
-INT32 osal_file_read(struct file *file, PUINT8 data, UINT32 size, UINT64 offset)
-{
-#if KERNEL_VERSION(4, 14, 0) <= LINUX_VERSION_CODE
-	return kernel_read(file, data, size, &offset);
-#else
-	return kernel_read(file, offset, data, size);
-#endif
-}
-

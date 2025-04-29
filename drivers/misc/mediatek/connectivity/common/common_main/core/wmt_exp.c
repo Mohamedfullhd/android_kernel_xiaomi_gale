@@ -162,15 +162,18 @@ static MTK_WCN_BOOL mtk_wcn_wmt_func_ctrl(ENUM_WMTDRV_TYPE_T type, ENUM_WMT_OPID
 	/*do not check return value, we will do this either way */
 	wmt_lib_host_awake_get();
 	/* wake up chip first */
-	if (DISABLE_PSM_MONITOR()) {
-		WMT_ERR_FUNC("wake up failed,OPID(%d) type(%zu) abort\n", pOp->op.opId, pOp->op.au4OpData[0]);
-		wmt_lib_put_op_to_free_queue(pOp);
-		wmt_lib_host_awake_put();
-		return MTK_WCN_BOOL_FALSE;
+	if (!bOffload) {
+		if (DISABLE_PSM_MONITOR()) {
+			WMT_ERR_FUNC("wake up failed,OPID(%d) type(%zu) abort\n", pOp->op.opId, pOp->op.au4OpData[0]);
+			wmt_lib_put_op_to_free_queue(pOp);
+			wmt_lib_host_awake_put();
+			return MTK_WCN_BOOL_FALSE;
+		}
 	}
 
 	bRet = wmt_lib_put_act_op(pOp);
-	ENABLE_PSM_MONITOR();
+	if (!bOffload)
+		ENABLE_PSM_MONITOR();
 	wmt_lib_host_awake_put();
 
 	if (bRet == MTK_WCN_BOOL_FALSE)
@@ -783,6 +786,13 @@ UINT32 mtk_wmt_get_gps_lna_pin_num(VOID)
 }
 EXPORT_SYMBOL(mtk_wmt_get_gps_lna_pin_num);
 
+/* begin ,prize-lifenfen-20181211, add FM_LNA_EN */
+UINT32 mtk_wmt_get_fm_lna_pin_num(VOID)
+{
+	return wmt_lib_get_fm_lna_pin_num();
+}
+EXPORT_SYMBOL(mtk_wmt_get_fm_lna_pin_num);
+/* end ,prize-lifenfen-20181211, add FM_LNA_EN */
 VOID mtk_wmt_set_ext_ldo(UINT32 flag)
 {
 	wmt_lib_set_ext_ldo(flag);
@@ -877,29 +887,3 @@ VOID mtk_wcn_wmt_mpu_lock_release(VOID)
 }
 EXPORT_SYMBOL(mtk_wcn_wmt_mpu_lock_release);
 
-INT32 mtk_wcn_get_reset_info(PUINT8 pBuff, INT32 buffLen)
-{
-	INT32 len = 0;
-	PUINT8 buf;
-
-	if (!pBuff) {
-		WMT_INFO_FUNC("pBuff is NULL\n");
-		return -1;
-	}
-
-	buf = wmt_lib_get_cpupcr_xml_format(&len);
-	if (!buf) {
-		WMT_INFO_FUNC("buf is NULL\n");
-		return -1;
-	}
-	snprintf(pBuff, buffLen, "%s", buf);
-
-	return 0;
-}
-EXPORT_SYMBOL(mtk_wcn_get_reset_info);
-
-INT32 mtk_wcn_get_host_assert_info(PUINT32 type, PUINT32 reason, PUINT32 en)
-{
-	return wmt_lib_get_host_assert_info(type, reason, en);
-}
-EXPORT_SYMBOL(mtk_wcn_get_host_assert_info);

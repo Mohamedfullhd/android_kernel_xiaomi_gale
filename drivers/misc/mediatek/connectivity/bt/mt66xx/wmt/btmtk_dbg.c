@@ -35,6 +35,7 @@ typedef struct {
 *			      P U B L I C   D A T A
 ********************************************************************************
 */
+bool g_bt_trace_pt = FALSE;
 
 /*******************************************************************************
 *                  F U N C T I O N   D E C L A R A T I O N S
@@ -43,6 +44,7 @@ typedef struct {
 static int bt_dbg_get_bt_state(int par1, int par2, int par3);
 static int bt_dbg_setlog_level(int par1, int par2, int par3);
 static int bt_dbg_is_adie_work(int par1, int par2, int par3);
+static int bt_dbg_trace_pt(int par1, int par2, int par3);
 
 /*******************************************************************************
 *			     P R I V A T E   D A T A
@@ -62,6 +64,7 @@ static const tBT_DEV_DBG_STRUCT bt_dev_dbg_struct[] = {
 	[0xb] = {bt_dbg_setlog_level,		TRUE},
 	[0xe] = {bt_dbg_get_bt_state,		TRUE},
 	[0x12] = {bt_dbg_is_adie_work,		TRUE},
+	[0x15] = {bt_dbg_trace_pt,		FALSE},
 };
 
 /*******************************************************************************
@@ -84,6 +87,15 @@ int bt_dbg_get_bt_state(int par1, int par2, int par3)
 	g_bt_dump_buf[0] = g_bt_turn_on;
 	g_bt_dump_buf[1] = '\0';
 	g_bt_dump_buf_len = 2;
+	return 0;
+}
+
+int bt_dbg_trace_pt(int par1, int par2, int par3)
+{
+	if(par2 == 0)
+		g_bt_trace_pt = FALSE;
+	else
+		g_bt_trace_pt = TRUE;
 	return 0;
 }
 
@@ -169,20 +181,24 @@ void bt_dbg_user_trx_cb(char *buf, int len)
 	int ret = 0;
 
 	/* 1. bluedroid use partial read, this callback will enter several times
-	   2. this function read and parse the command_complete event */
-	memcpy(&g_bt_dbg_st.rx_buf[g_bt_dbg_st.rx_len], buf, len);
-	g_bt_dbg_st.rx_len += len;
-
-	// check the complete packet is read out by bluedroid
-	if(g_bt_dbg_st.rx_len != (g_bt_dbg_st.rx_buf[2] + 3))
-		return;
+	   2. this function read and parse the command_complete event
+	   3. check rx_buf size preventing overflow */
+	if(g_bt_dbg_st.rx_len + len < 64) {  
+	        memcpy(&g_bt_dbg_st.rx_buf[g_bt_dbg_st.rx_len], buf, len);
+	        g_bt_dbg_st.rx_len += len;
+        }
 
 	// if this event is not the desire one, skip and reset buffer
-	if((g_bt_dbg_st.rx_buf[4] + (g_bt_dbg_st.rx_buf[5] << 8)) != g_bt_dbg_st.trx_opcode) {
+	if(g_bt_dbg_st.rx_len > 6 && ((g_bt_dbg_st.rx_buf[4] + (g_bt_dbg_st.rx_buf[5] << 8)) != g_bt_dbg_st.trx_opcode)) {
+	        BT_LOG_PRT_INFO_RAW(g_bt_dbg_st.rx_buf, g_bt_dbg_st.rx_len, "%s: len[%ud], ErrorEvt: ", __func__, g_bt_dbg_st.rx_len);
 		g_bt_dbg_st.rx_len = 0;
 		memset(g_bt_dbg_st.rx_buf, 0, sizeof(g_bt_dbg_st.rx_buf));
 		return;
 	}
+
+	// check the complete packet is read out by bluedroid
+	if(g_bt_dbg_st.rx_len != (g_bt_dbg_st.rx_buf[2] + 3))
+		return;
 
 	// desire rx event is received, write to read buffer as string
 	evt_len = g_bt_dbg_st.rx_len;
@@ -265,8 +281,8 @@ ssize_t bt_dbg_write(struct file *filp, const char __user *buffer, size_t count,
 	if (copy_from_user(buf, buffer, len))
 		return -EFAULT;
 	buf[len] = '\0';
-	BT_LOG_PRT_INFO("g_bt_turn_on[%d], dbg_enable[%d], len[%d], data = %s\n",
-		g_bt_turn_on, g_bt_dbg_enable, (int)len, buf);
+	BT_LOG_PRT_INFO("g_bt_turn_on[%d], dbg_enable[%d], len[%d]\n",
+		g_bt_turn_on, g_bt_dbg_enable, (int)len);
 
 	/* Check debug function is enabled or not
 	 *   - not enable yet: user should enable it

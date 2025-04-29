@@ -911,7 +911,8 @@ static bool drv_set_own(void)
 {
 	struct fm_spi_interface *si = &fm_wcn_ops.si;
 	struct fm_ext_interface *ei = &fm_wcn_ops.ei;
-	unsigned int val, hw_id, tmp1, tmp2, i;
+	unsigned int val = 0, hw_id = 0, i = 0;
+	unsigned int tmp1 = 0, tmp2 = 0;
 	int ret = 0;
 
 	ret = FM_LOCK(fm_wcn_ops.own_lock);
@@ -1878,6 +1879,13 @@ int fm_register_plat(unsigned int family_id, unsigned int conn_id)
 	return drv_do_ioremap();
 }
 
+static bool drv_is_aoc_support(void)
+{
+	struct fm_ext_interface *ei = &fm_wcn_ops.ei;
+
+	return !(ei->family_id == 0x6885 || ei->family_id == 0x6877);
+}
+
 static void register_drv_ops_init(void)
 {
 	struct fm_ext_interface *ei = &fm_wcn_ops.ei;
@@ -1889,6 +1897,7 @@ static void register_drv_ops_init(void)
 	ei->get_hw_version = drv_get_hw_version;
 	ei->get_top_index = drv_get_top_index;
 	ei->get_get_adie = drv_get_get_adie;
+	ei->is_aoc_support = drv_is_aoc_support;
 
 #if CFG_FM_CONNAC2
 	ei->enable_eint = drv_enable_eint;

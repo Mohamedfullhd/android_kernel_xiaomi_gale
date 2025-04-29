@@ -115,6 +115,10 @@ static INT32 wmt_dbg_stp_sdio_reg_read(INT32 par1, INT32 address, INT32 value);
 static INT32 wmt_dbg_stp_sdio_reg_write(INT32 par1, INT32 address, INT32 value);
 static INT32 wmt_dbg_show_thread_debug_info(INT32 par1, INT32 address, INT32 value);
 static INT32 wmt_dbg_met_ctrl(INT32 par1, INT32 met_ctrl, INT32 log_ctrl);
+#ifdef CONFIG_MTK_CONNSYS_DEDICATED_LOG_PATH
+static INT32 wmt_dbg_set_fw_log_mode(INT32 par1, INT32 par2, INT32 par3);
+static INT32 wmt_dbg_emi_dump(INT32 par1, INT32 offset, INT32 size);
+#endif
 static INT32 wmt_dbg_suspend_debug(INT32 par1, INT32 offset, INT32 size);
 static INT32 wmt_dbg_fw_log_ctrl(INT32 par1, INT32 onoff, INT32 level);
 static INT32 wmt_dbg_pre_pwr_on_ctrl(INT32 par1, INT32 enable, INT32 par3);
@@ -126,6 +130,9 @@ static INT32 wmt_dbg_thermal_ctrl(INT32 par1, INT32 par2, INT32 par3);
 
 static INT32 wmt_dbg_gps_suspend(INT32 par1, INT32 par2, INT32 par3);
 static INT32 wmt_dbg_set_bt_link_status(INT32 par1, INT32 par2, INT32 par3);
+
+static int wmt_dbg_clk_reg_read(INT32 par1, INT32 par2, INT32 par3);
+static int wmt_dbg_clk_reg_write(INT32 par1, INT32 par2, INT32 par3);
 
 static const WMT_DEV_DBG_FUNC wmt_dev_dbg_func[] = {
 	[0x0] = wmt_dbg_psm_ctrl,
@@ -177,11 +184,17 @@ static const WMT_DEV_DBG_FUNC wmt_dev_dbg_func[] = {
 	[0x28] = wmt_dbg_pre_pwr_on_ctrl,
 	[0x29] = wmt_dbg_thermal_query,
 	[0x2a] = wmt_dbg_thermal_ctrl,
+#ifdef CONFIG_MTK_CONNSYS_DEDICATED_LOG_PATH
+	[0x2c] = wmt_dbg_set_fw_log_mode,
+	[0x2d] = wmt_dbg_emi_dump,
+#endif
 	[0x2e] = wmt_dbg_suspend_debug,
 	[0x2f] = wmt_dbg_set_bt_link_status,
 	[0x30] = wmt_dbg_show_thread_debug_info,
 	[0x31] = wmt_dbg_gps_suspend,
 	[0x32] = wmt_dbg_alarm_ctrl,
+	[0x33] = wmt_dbg_clk_reg_read,
+	[0x34] = wmt_dbg_clk_reg_write,
 };
 
 static VOID wmt_dbg_fwinfor_print_buff(UINT32 len)
@@ -703,6 +716,20 @@ static INT32 wmt_dbg_ap_reg_write(INT32 par1, INT32 par2, INT32 par3)
 	return 0;
 }
 
+#ifdef CONFIG_MTK_CONNSYS_DEDICATED_LOG_PATH
+static INT32 wmt_dbg_set_fw_log_mode(INT32 par1, INT32 par2, INT32 par3)
+{
+	connsys_dedicated_log_set_log_mode(par2);
+	return 0;
+}
+
+static INT32 wmt_dbg_emi_dump(INT32 par1, INT32 offset, INT32 size)
+{
+	connsys_dedicated_log_dump_emi(offset, size);
+	return 0;
+}
+#endif
+
 /********************************************************/
 /* par2:       */
 /*     0: Off  */
@@ -732,6 +759,44 @@ static INT32 wmt_dbg_set_bt_link_status(INT32 par1, INT32 par2, INT32 par3)
 		return 0;
 
 	wmt_lib_set_bt_link_status(par2, par3);
+	return 0;
+}
+
+static int wmt_dbg_clk_reg_read(INT32 par1, INT32 par2, INT32 par3)
+{
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 15, 0))
+	int value = 0;
+	struct regmap *map = (struct regmap *)wmt_lib_consys_clock_get_regmap();
+
+	pr_info("%s clock ic register read, reg address:0x%x\n", __func__, par2);
+	if (map == NULL) {
+		pr_notice("%s clock ic regmap is NULL.\n", __func__);
+		return 0;
+	}
+	regmap_read(map, par2, &value);
+	pr_info("%s clock ic register read, reg address:0x%x, value:0x%x\n", __func__, par2, value);
+#endif
+
+	return 0;
+}
+
+static int wmt_dbg_clk_reg_write(INT32 par1, INT32 par2, INT32 par3)
+{
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 15, 0))
+	int value = 0;
+	struct regmap *map = (struct regmap *)wmt_lib_consys_clock_get_regmap();
+
+	pr_info("%s clock ic register write, reg address:0x%x, value:0x%x\n", __func__, par2, par3);
+	if (map == NULL) {
+		pr_notice("%s clock ic regmap is NULL.\n", __func__);
+		return 0;
+	}
+
+	regmap_write(map, par2, par3);
+	regmap_read(map, par2, &value);
+	pr_info("%s clock ic register write done, value after write:0x%x\n", __func__, value);
+#endif
+
 	return 0;
 }
 
@@ -1502,8 +1567,7 @@ ssize_t wmt_dbg_write(struct file *filp, const char __user *buffer, size_t count
 	 * 0x2f: set bt link status
 	 * 0x32: alarm dump control
 	 */
-	if (0 == dbgEnabled && 0x15 != x && 0x2e != x && 0x2f != x &&
-		0x7 != x && x != 0x32) {
+	if (0 == dbgEnabled && 0x15 != x && 0x2e != x && 0x2f != x && x != 0x32) {
 		WMT_INFO_FUNC("please enable WMT debug first\n\r");
 		return len;
 	}

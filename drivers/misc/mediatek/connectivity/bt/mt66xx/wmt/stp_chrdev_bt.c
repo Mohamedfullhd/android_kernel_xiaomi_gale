@@ -4,6 +4,7 @@
  */
 
 #include "bt.h"
+#include "btmtk_dbg_tp_evt_if.h"
 #include <linux/pm_wakeup.h>
 #include <linux/version.h>
 #include <linux/pm_qos.h>
@@ -80,6 +81,7 @@ static UINT32 rstflag;
 static UINT8 HCI_EVT_HW_ERROR[] = {0x04, 0x10, 0x01, 0x00};
 static loff_t rd_offset;
 
+extern bool g_bt_trace_pt;
 extern int bt_dev_dbg_init(void);
 extern int bt_dev_dbg_deinit(void);
 extern int bt_dev_dbg_set_state(bool turn_on);
@@ -111,17 +113,37 @@ void bthost_debug_init(void)
 void bthost_debug_print(void)
 {
 	uint32_t i = 0;
-	for (i = 0; i < BTHOST_INFO_MAX; i++){
-		if (bthost_info_table[i].id == 0){
-			BT_LOG_PRT_WARN("[bt host info][%d-%d] not set", i, BTHOST_INFO_MAX);
+	uint32_t ret = 0;
+	uint8_t *pos = NULL, *end = NULL;
+	uint8_t dump_buffer[700] = {0};
+
+	pos = &dump_buffer[0];
+	end = pos + 700 - 1;
+
+	ret = snprintf(pos, (end - pos + 1), "[bt host info] ");
+	pos += ret;
+
+	for (i = 0; i < BTHOST_INFO_MAX; i++) {
+		if (bthost_info_table[i].id == 0) {
+			ret = snprintf(pos, (end - pos + 1),"[%d-%d] not set", i, BTHOST_INFO_MAX);
+			if (ret < 0 || ret >= (end - pos + 1)) {
+				BT_LOG_PRT_ERR("%s: snprintf fail i[%d] ret[%d]", __func__, i, ret);
+				break;
+			}
+			pos += ret;
 			break;
-		}
-		else {
-			BT_LOG_PRT_WARN("[bt host info][%d][%s : 0x%08x]", i,
+		} else {
+			ret = snprintf(pos, (end - pos + 1),"[%d][%s : 0x%08x] ", i,
 			bthost_info_table[i].desc,
 			bthost_info_table[i].value);
+			if (ret < 0 || ret >= (end - pos + 1)) {
+				BT_LOG_PRT_ERR("%s: snprintf fail i[%d] ret[%d]", __func__, i, ret);
+				break;
+			}
+			pos += ret;
 		}
 	}
+	BT_LOG_PRT_WARN("%s", dump_buffer);
 }
 
 void bthost_debug_save(uint32_t id, uint32_t value, char* desc)
@@ -219,12 +241,10 @@ static int bt_fb_notifier_callback(struct notifier_block
 	switch (blank) {
 	case FB_BLANK_UNBLANK:
 	case FB_BLANK_POWERDOWN:
-#if (ENABLE_LOW_POWER_DEBUG == 1)
 		if(btonflag == 1 && rstflag == 0) {
 			BT_LOG_PRT_INFO("blank state [%ld]", blank);
 			bt_read_cr("HOST_MAILBOX_BT_ADDR", 0x18007124);
 		}
-#endif
 		break;
 	default:
 		break;
@@ -262,14 +282,12 @@ static int bt_pm_notifier_callback(struct notifier_block *nb,
 	switch (event) {
 		case PM_SUSPEND_PREPARE:
 		case PM_POST_SUSPEND:
-#if (ENABLE_LOW_POWER_DEBUG == 1)
 			if(btonflag == 1 && rstflag == 0) {
 				// for fw debug power issue
 				bt_read_cr("HOST_MAILBOX_BT_ADDR", 0x18007124);
 
 				bthost_debug_print();
 			}
-#endif
 			break;
 		default:
 			break;
@@ -317,6 +335,9 @@ static VOID bt_cdev_rst_cb(ENUM_WMTDRV_TYPE_T src,
 	if ((src == WMTDRV_TYPE_WMT) && (dst == WMTDRV_TYPE_BT) && (type == WMTMSG_TYPE_RESET)) {
 		switch (rst_msg) {
 		case WMTRSTMSG_RESET_START:
+#ifdef CONFIG_MTK_CONNSYS_DEDICATED_LOG_PATH
+			bt_state_notify(OFF);
+#endif
 			BT_LOG_PRT_INFO("Whole chip reset start!\n");
 			rstflag = 1;
 			break;
@@ -395,7 +416,8 @@ static VOID BT_event_cb(VOID)
 unsigned int BT_poll(struct file *filp, poll_table *wait)
 {
 	UINT32 mask = 0;
-	
+
+	//bt_dbg_tp_evt(TP_ACT_POLL, 0, 0, NULL);
 	if ((mtk_wcn_stp_is_rxqueue_empty(BT_TASK_INDX) && rstflag == 0) ||
 	    (rstflag == 1) || (rstflag == 3)) {
 		/*
@@ -425,8 +447,14 @@ unsigned int BT_poll(struct file *filp, poll_table *wait)
 
 static ssize_t __bt_write(const PUINT8 buffer, size_t count)
 {
-	INT32 retval = mtk_wcn_stp_send_data(buffer, count, BT_TASK_INDX);
-	
+	INT32 retval = 0;
+
+	if (g_bt_trace_pt)
+		bt_dbg_tp_evt(TP_ACT_WR_IN, 0, count, buffer);
+	retval = mtk_wcn_stp_send_data(buffer, count, BT_TASK_INDX);
+	if (g_bt_trace_pt)
+		bt_dbg_tp_evt(TP_ACT_WR_OUT, 0, count, buffer);
+
 	if (retval < 0)
 		BT_LOG_PRT_ERR("mtk_wcn_stp_send_data fail, retval %d\n", retval);
 	else if (retval == 0) {
@@ -539,6 +567,8 @@ ssize_t BT_read(struct file *filp, char __user *buf, size_t count, loff_t *f_pos
 {
 	INT32 retval = 0;
 
+	if (g_bt_trace_pt)
+		bt_dbg_tp_evt(TP_ACT_RD_IN, 0, count, NULL);
 	ftrace_print("%s get called, count %zu", __func__, count);
 	down(&rd_mtx);
 
@@ -608,6 +638,8 @@ ssize_t BT_read(struct file *filp, char __user *buf, size_t count, loff_t *f_pos
 				g_bt_dbg_st.trx_cb(i_buf, retval);
 			}
 			//BT_LOG_PRT_DBG("Read bytes %d\n", retval);
+			if (g_bt_trace_pt)
+				bt_dbg_tp_evt(TP_ACT_RD_OUT, 0, retval, i_buf);
 			BT_LOG_PRT_DBG_RAW(i_buf, retval, "%s: len[%d], RX: ", __func__, retval);
 			break;
 		}
@@ -740,6 +772,8 @@ static int BT_open(struct inode *inode, struct file *file)
 		return -EIO;
 	}
 
+	if (g_bt_trace_pt)
+		bt_dbg_tp_evt(TP_ACT_PWR_ON, 0, 0, NULL);
 	BT_LOG_PRT_INFO("major %d minor %d (pid %d)\n", imajor(inode), iminor(inode), current->pid);
 
 	/* Turn on BT */
@@ -774,6 +808,10 @@ static int BT_open(struct inode *inode, struct file *file)
 
 	sema_init(&wr_mtx, 1);
 	sema_init(&rd_mtx, 1);
+
+#ifdef CONFIG_MTK_CONNSYS_DEDICATED_LOG_PATH
+	bt_state_notify(ON);
+#endif
 	bt_dev_dbg_set_state(TRUE);
 
 	if(pm_qos_support) {
@@ -803,10 +841,15 @@ static int BT_open(struct inode *inode, struct file *file)
 static int BT_close(struct inode *inode, struct file *file)
 {
 	BT_LOG_PRT_INFO("major %d minor %d (pid %d)\n", imajor(inode), iminor(inode), current->pid);
+	if (g_bt_trace_pt)
+		bt_dbg_tp_evt(TP_ACT_PWR_OFF, 0, 0, NULL);
 
 	bthost_debug_init();
 	bt_pm_notify_unregister();
 	bt_dev_dbg_set_state(FALSE);
+#ifdef CONFIG_MTK_CONNSYS_DEDICATED_LOG_PATH
+	bt_state_notify(OFF);
+#endif
 
 	rstflag = 0;
 	bt_ftrace_flag = 0;
@@ -900,6 +943,9 @@ static int BT_init(void)
 
 	BT_LOG_PRT_INFO("%s driver(major %d) installed\n", BT_DRIVER_NAME, BT_major);
 
+#ifdef CONFIG_MTK_CONNSYS_DEDICATED_LOG_PATH
+	fw_log_bt_init();
+#endif
 	bt_dev_dbg_init();
 
 	pm_qos_set_feature();
@@ -947,6 +993,9 @@ static void BT_exit(void)
 	}
 
 	bt_dev_dbg_deinit();
+#ifdef CONFIG_MTK_CONNSYS_DEDICATED_LOG_PATH
+	fw_log_bt_exit();
+#endif
 
 	dev = MKDEV(BT_major, 0);
 	/* Destroy wake lock*/
@@ -969,6 +1018,8 @@ static void BT_exit(void)
 	BT_LOG_PRT_INFO("%s driver removed\n", BT_DRIVER_NAME);
 }
 
+#ifdef MTK_WCN_REMOVE_KERNEL_MODULE
+
 int mtk_wcn_stpbt_drv_init(void)
 {
 	return BT_init();
@@ -980,3 +1031,10 @@ void mtk_wcn_stpbt_drv_exit(void)
 	return BT_exit();
 }
 EXPORT_SYMBOL(mtk_wcn_stpbt_drv_exit);
+
+#else
+
+module_init(BT_init);
+module_exit(BT_exit);
+
+#endif
