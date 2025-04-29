@@ -21,6 +21,9 @@
 #include "wmt_plat.h"
 #include "wmt_detect.h"
 #include "wmt_lib.h"
+#ifdef CONFIG_MTK_CONNSYS_DEDICATED_LOG_PATH
+#include "connsys_debug_utility.h"
+#endif
 #include <linux/kthread.h>
 
 #define PFX_BTM                         "[STP-BTM] "
@@ -50,7 +53,7 @@ do { \
 #define STP_BTM_PR_WARN(fmt, arg...) \
 do { \
 	if (gBtmDbgLevel >= STP_BTM_LOG_WARN) \
-		pr_info(PFX_BTM "[W]%s: "  fmt, __func__, ##arg); \
+		pr_warn(PFX_BTM "[W]%s: "  fmt, __func__, ##arg); \
 } while (0)
 #define STP_BTM_PR_ERR(fmt, arg...) \
 do { \
@@ -116,8 +119,10 @@ static INT32 _stp_btm_handler(MTKSTP_BTM_T *stp_btm, P_STP_BTM_OP pStpOp)
 	case STP_OPID_BTM_RST:
 		STP_BTM_PR_INFO("whole chip reset start!\n");
 		if (wmt_detect_get_chip_type() == WMT_CHIP_TYPE_SOC &&
-		    mtk_wcn_stp_coredump_flag_get() != 0 && chip_reset_only == 0 &&
-		    stp_dbg_read_memdump_mode(0) != STP_DBG_MEMDUMP_NO_LOG) {
+		    mtk_wcn_stp_coredump_flag_get() != 0 && chip_reset_only == 0) {
+#ifdef CONFIG_MTK_CONNSYS_DEDICATED_LOG_PATH
+			connsys_dedicated_log_flush_emi();
+#endif
 			stp_dbg_core_dump_flush(0, MTK_WCN_BOOL_FALSE);
 		}
 		STP_BTM_PR_INFO("....+\n");
@@ -389,7 +394,7 @@ static INT32 _stp_btm_proc(PVOID pvData)
 		}
 
 		if (stp_btm->gDumplogflag) {
-			/* pr_info("enter place1\n"); */
+			/* pr_warn("enter place1\n"); */
 			stp_btm->gDumplogflag = 0;
 			continue;
 		}
@@ -676,7 +681,7 @@ INT32 stp_btm_reset_btm_wq(MTKSTP_BTM_T *stp_btm)
 
 INT32 stp_notify_btm_dump(MTKSTP_BTM_T *stp_btm)
 {
-	/* pr_info("%s:enter++\n",__func__); */
+	/* pr_warn("%s:enter++\n",__func__); */
 	if (stp_btm == NULL) {
 		osal_dbg_print("%s: NULL POINTER\n", __func__);
 		return -1;

@@ -531,6 +531,8 @@ enum ENUM_TX_STATISTIC_COUNTER {
 	TX_INACTIVE_STA_DROP,
 	TX_FORWARD_OVERFLOW_DROP,
 	TX_AP_BORADCAST_DROP,
+	TX_INVALID_MSDUINFO_COUNT,
+	TX_DROP_PID_COUNT,
 	TX_STATISTIC_COUNTER_NUM
 };
 
@@ -864,7 +866,11 @@ struct MSDU_INFO {
 	uint8_t ucTarQueue;
 #endif
 	uint8_t fgMgmtUseDataQ;
-	uint16_t u2HwSeqNum;
+
+#if CFG_SUPPORT_DROP_INVALID_MSDUINFO
+	/* sanity drop flag */
+	u_int8_t fgDrop;
+#endif /* CFG_SUPPORT_DROP_INVALID_MSDUINFO */
 };
 
 #define HIF_PKT_FLAGS_CT_INFO_APPLY_TXD            BIT(0)
@@ -1845,6 +1851,11 @@ void nicTxFreeMsduInfoPacket(IN struct ADAPTER *prAdapter,
 
 void nicTxReturnMsduInfo(IN struct ADAPTER *prAdapter,
 	IN struct MSDU_INFO *prMsduInfoListHead);
+
+void nicTxInitPktPID(
+	IN struct ADAPTER *prAdapter,
+	IN uint8_t ucWlanIndex
+);
 
 u_int8_t nicTxFillMsduInfo(IN struct ADAPTER *prAdapter,
 	IN struct MSDU_INFO *prMsduInfo, IN void *prNdisPacket);

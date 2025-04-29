@@ -198,18 +198,18 @@
 #endif
 
 #define NUM_TC_RESOURCE_TO_STATISTICS       4
-
+#if CFG_SUPPORT_NCHO
 #define WLAN_CFG_ARGV_MAX 64
+#else
+#define WLAN_CFG_ARGV_MAX 20
+#endif
 #define WLAN_CFG_ARGV_MAX_LONG	22	/* for WOW, 2+20 */
 #define WLAN_CFG_ENTRY_NUM_MAX	400	/* 128 */
-#define WLAN_CFG_KEY_LEN_MAX	48	/* include \x00  EOL */
+#define WLAN_CFG_KEY_LEN_MAX	32	/* include \x00  EOL */
 #define WLAN_CFG_VALUE_LEN_MAX	128	/* include \x00 EOL */
 #define WLAN_CFG_FLAG_SKIP_CB	BIT(0)
-#if CFG_TC10_FEATURE
-#define WLAN_CFG_FILE_BUF_SIZE	6144
-#else
 #define WLAN_CFG_FILE_BUF_SIZE	2048
-#endif
+
 #define WLAN_CFG_REC_ENTRY_NUM_MAX 400
 
 
@@ -456,12 +456,6 @@ struct CFG_SETTING {
 #define FW_CFG_KEY_NCHO_SCAN_PERIOD		"NCHOScnPeriod"
 #endif
 
-#define FW_CFG_KEY_ROAM_RCPI		"RoamingRCPIValue"
-
-#define WLAN_GET_SEQ_SEQ(seq) \
-	(((seq) & (~(BIT(3) | BIT(2) | BIT(1) | BIT(0)))) >> 4)
-
-
 /*******************************************************************************
  *                             D A T A   T Y P E S
  *******************************************************************************
@@ -556,7 +550,6 @@ enum ENUM_REG_CH_MAP {
 	REG_CH_MAP_COUNTRY_CODE,
 	REG_CH_MAP_TBL_IDX,
 	REG_CH_MAP_CUSTOMIZED,
-	REG_CH_MAP_BLOCK_INDOOR,
 	REG_CH_MAP_NUM
 };
 
@@ -594,6 +587,7 @@ enum {
 	DEBUG_MSG_TYPE_END
 };
 
+
 #if (CFG_SUPPORT_PKT_OFLD == 1)
 
 #define PKT_OFLD_BUF_SIZE 1488
@@ -601,7 +595,6 @@ enum {
 	PKT_OFLD_TYPE_APF = 0,
 	PKT_OFLD_TYPE_IGMP,
 	PKT_OFLD_TYPE_MDNS,
-	PKT_OFLD_TYPE_RA,
 	PKT_OFLD_TYPE_CUSTOM,
 	PKT_OFLD_TYPE_END
 };
@@ -611,10 +604,6 @@ enum {
 	PKT_OFLD_OP_ENABLE,
 	PKT_OFLD_OP_INSTALL,
 	PKT_OFLD_OP_QUERY,
-	PKT_OFLD_OP_ADD,
-	PKT_OFLD_OP_REMOVE,
-	PKT_OFLD_OP_UPDATE,
-	PKT_OFLD_OP_REPORT,
 	PKT_OFLD_OP_END
 };
 #endif /* CFG_SUPPORT_PKT_OFLD */
@@ -1290,12 +1279,13 @@ struct TRX_INFO {
 	uint32_t u4RxOk[MAX_BSSID_NUM];	/* By BSSIDX */
 };
 
-struct RateInfo {
-	uint32_t u4Mode;
-	uint32_t u4Nss;
-	uint32_t u4Bw;
-	uint32_t u4Gi;
-	uint32_t u4Rate;
+struct ENV_INFO {
+	struct timespec64 rLongestTxTime;
+	uint32_t u4Snr;
+	uint32_t u4Noise;
+	uint32_t u4RxListenTime;
+	uint32_t u4TxTimeCount;
+	uint32_t u4Idle;
 };
 
 /*******************************************************************************
@@ -1379,6 +1369,12 @@ void wlanClearPendingCommandQueue(IN struct ADAPTER *prAdapter);
 void wlanReleaseCommand(IN struct ADAPTER *prAdapter,
 			IN struct CMD_INFO *prCmdInfo,
 			IN enum ENUM_TX_RESULT_CODE rTxDoneStatus);
+
+void wlanReleaseCommandEx(IN struct ADAPTER *prAdapter,
+			IN struct CMD_INFO *prCmdInfo,
+			IN enum ENUM_TX_RESULT_CODE rTxDoneStatus,
+			IN u_int8_t fgIsNeedHandler);
+
 
 void wlanReleasePendingOid(IN struct ADAPTER *prAdapter,
 			   IN unsigned long ulParamPtr);
@@ -1566,6 +1562,12 @@ void wlanSetAcpiState(IN struct ADAPTER *prAdapter,
 uint8_t wlanGetEcoVersion(IN struct ADAPTER *prAdapter);
 
 /*----------------------------------------------------------------------------*/
+/* set preferred band configuration corresponding to network type             */
+/*----------------------------------------------------------------------------*/
+void wlanSetPreferBandByNetwork(IN struct ADAPTER *prAdapter,
+				IN enum ENUM_BAND eBand, IN uint8_t ucBssIndex);
+
+/*----------------------------------------------------------------------------*/
 /* get currently operating channel information                                */
 /*----------------------------------------------------------------------------*/
 uint8_t wlanGetChannelNumberByNetwork(IN struct ADAPTER *prAdapter,
@@ -1670,14 +1672,6 @@ uint32_t wlanCfgGetUint32(IN struct ADAPTER *prAdapter, const int8_t *pucKey,
 
 int32_t wlanCfgGetInt32(IN struct ADAPTER *prAdapter, const int8_t *pucKey,
 			int32_t i4ValueDef);
-
-uint32_t wlanCfgGetUint32Range(IN struct ADAPTER *prAdapter,
-	const int8_t *pucKey, uint32_t u4ValueDef,
-	uint32_t *pu4MinValue, uint32_t *pu4MaxValue);
-
-int32_t wlanCfgGetInt32Range(IN struct ADAPTER *prAdapter,
-	const int8_t *pucKey, int32_t i4ValueDef,
-	int32_t *pi4MinValue, int32_t *pi4MaxValue);
 
 uint32_t wlanCfgSetUint32(IN struct ADAPTER *prAdapter, const int8_t *pucKey,
 			  uint32_t u4Value);
@@ -1869,16 +1863,16 @@ wlanSortChannel(IN struct ADAPTER *prAdapter,
 void wlanSuspendPmHandle(struct GLUE_INFO *prGlueInfo);
 void wlanResumePmHandle(struct GLUE_INFO *prGlueInfo);
 
-#if defined(CFG_REPORT_MAX_TX_RATE) && (CFG_REPORT_MAX_TX_RATE == 1)
+#if CFG_REPORT_MAX_TX_RATE
 int wlanGetMaxTxRate(IN struct ADAPTER *prAdapter,
 		 IN void *prBssPtr, IN struct STA_RECORD *prStaRec,
 		 OUT uint32_t *pu4CurRate, OUT uint32_t *pu4MaxRate);
 #endif /* CFG_REPORT_MAX_TX_RATE */
 
 #ifdef CFG_SUPPORT_LINK_QUALITY_MONITOR
-int wlanGetRxRate(IN struct GLUE_INFO *prGlueInfo, IN uint8_t ucBssIdx,
-		OUT uint32_t *pu4CurRate, OUT uint32_t *pu4MaxRate,
-		OUT struct RateInfo *prRateInfo);
+int wlanGetRxRate(IN struct GLUE_INFO *prGlueInfo,
+		IN uint8_t ucBssIdx, OUT uint32_t *pu4CurRate,
+		OUT uint32_t *pu4MaxRate, OUT uint32_t *pu4CurBw);
 uint32_t wlanLinkQualityMonitor(struct GLUE_INFO *prGlueInfo, bool bFgIsOid);
 void wlanFinishCollectingLinkQuality(struct GLUE_INFO *prGlueInfo);
 #endif /* CFG_SUPPORT_LINK_QUALITY_MONITOR */
@@ -1914,11 +1908,11 @@ wlanCleanAllEmCfgSetting(IN struct ADAPTER *prAdapter);
 #if CFG_SUPPORT_NCHO
 void wlanNchoInit(IN struct ADAPTER *prAdapter, IN uint8_t fgFwSync);
 uint32_t wlanNchoSetFWEnable(IN struct ADAPTER *prAdapter, IN uint8_t fgEnable);
+uint32_t wlanNchoSetFWRssiTrigger(IN struct ADAPTER *prAdapter,
+	IN int32_t i4RoamTriggerRssi);
 uint32_t wlanNchoSetFWScanPeriod(IN struct ADAPTER *prAdapter,
 	IN uint32_t u4RoamScanPeriod);
 #endif
-uint32_t wlanSetFWRssiTrigger(IN struct ADAPTER *prAdapter,
-	IN const char *key, IN int32_t i4RoamTriggerRssi);
 
 u_int8_t wlanWfdEnabled(struct ADAPTER *prAdapter);
 
@@ -1929,6 +1923,10 @@ uint32_t wlanSetRxBaSize(IN struct GLUE_INFO *prGlueInfo,
 	int8_t i4Type, uint16_t u2BaSize);
 uint32_t wlanSetTxBaSize(IN struct GLUE_INFO *prGlueInfo,
 	int8_t i4Type, uint16_t u2BaSize);
+
+void
+wlanGetEnvInfo(IN struct ADAPTER *prAdapter,
+	OUT struct ENV_INFO *prEnvInfo);
 
 void
 wlanGetTRXInfo(IN struct ADAPTER *prAdapter,
@@ -1959,6 +1957,4 @@ uint32_t wlanSendFwLogControlCmd(IN struct ADAPTER *prAdapter,
 				uint32_t u4SetQueryInfoLen,
 				int8_t *pucInfoBuffer);
 
-int wlanChipConfigWithType(struct ADAPTER *prAdapter,
-	char *pcCommand, int i4TotalLen, uint8_t type);
 #endif /* _WLAN_LIB_H */

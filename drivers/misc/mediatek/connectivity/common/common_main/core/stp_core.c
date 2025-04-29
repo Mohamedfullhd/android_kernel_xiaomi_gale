@@ -226,7 +226,7 @@ static INT32 stp_ctx_lock_deinit(mtkstp_context_struct *pctx)
 static INT32 stp_ctx_lock(mtkstp_context_struct *pctx)
 {
 	/* dump_stack(); */
-	/* pr_info("stp_lock\n\r"); */
+	/* pr_debug("stp_lock\n\r"); */
 #if CFG_STP_CORE_CTX_SPIN_LOCK
 	return osal_lock_unsleepable_lock(&((pctx)->stp_mutex));
 #else
@@ -237,7 +237,7 @@ static INT32 stp_ctx_lock(mtkstp_context_struct *pctx)
 static INT32 stp_ctx_unlock(mtkstp_context_struct *pctx)
 {
 	/* dump_stack(); */
-	/* pr_info("stp_unlock\n\r"); */
+	/* pr_debug("stp_unlock\n\r"); */
 
 #if CFG_STP_CORE_CTX_SPIN_LOCK
 	return osal_unlock_unsleepable_lock(&((pctx)->stp_mutex));
@@ -2260,10 +2260,6 @@ static INT32 stp_parser_data_in_full_mode(UINT32 length, UINT8 *p_data)
 
 			if (mtk_wcn_stp_get_wmt_trg_assert() == 1)
 				stp_btm_stop_trigger_assert_timer(STP_BTM_CORE(stp_core_ctx));
-			else
-				/* clear debug info if triggered by fw */
-				stp_dbg_clear_cpupcr_reg_info();
-
 			if (STP_IS_READY(stp_core_ctx))
 				mtk_wcn_stp_dbg_dump_package();
 

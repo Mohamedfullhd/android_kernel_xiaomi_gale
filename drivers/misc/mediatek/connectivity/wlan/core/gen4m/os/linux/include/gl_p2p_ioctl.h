@@ -341,16 +341,6 @@ extern const uint32_t mtk_cipher_suites[9];
 	.flags      = (_flags),             \
 }
 
-#define CHAN2G(_channel, _freq, _flags)             \
-{                                               \
-	.band               = KAL_BAND_2GHZ,  \
-	.center_freq        = (_freq),              \
-	.hw_value           = (_channel),           \
-	.flags              = (_flags),             \
-	.max_antenna_gain   = 0,                    \
-	.max_power          = 30,                   \
-}
-
 /*******************************************************************************
 *                  F U N C T I O N   D E C L A R A T I O N S
 ********************************************************************************
@@ -675,7 +665,7 @@ mtk_p2p_wext_get_powermode(IN struct net_device *prDev,
 
 /* Private Wireless I/O Controls takes use of iw_handler */
 int
-mtk_p2p_wext_set_local_dev_dbg(IN struct net_device *prDev,
+mtk_p2p_wext_set_local_dev_info(IN struct net_device *prDev,
 		IN struct iw_request_info *info,
 		IN OUT union iwreq_data *wrqu,
 		IN OUT char *extra);
@@ -717,7 +707,7 @@ mtk_p2p_wext_password_ready(IN struct net_device *prDev,
 		IN OUT char *extra);
 
 int
-mtk_p2p_wext_request_dev_dbg(IN struct net_device *prDev,
+mtk_p2p_wext_request_dev_info(IN struct net_device *prDev,
 		IN struct iw_request_info *info,
 		IN OUT union iwreq_data *wrqu,
 		IN OUT char *extra);

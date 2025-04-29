@@ -537,9 +537,7 @@ struct mt66xx_chip_info mt66xx_chip_info_soc5_0 = {
 	.top_hcr = CONNAC2X_TOP_HCR,
 	.top_hvr = CONNAC2X_TOP_HVR,
 	.top_fvr = CONNAC2X_TOP_FVR,
-#if (CFG_SUPPORT_802_11AX == 1)
 	.arb_ac_mode_addr = SOC5_0_ARB_AC_MODE_ADDR,
-#endif
 	.custom_oid_interface_version = MTK_CUSTOM_OID_INTERFACE_VERSION,
 	.em_interface_version = MTK_EM_INTERFACE_VERSION,
 	.asicCapInit = asicConnac2xCapInit,
@@ -559,9 +557,6 @@ struct mt66xx_chip_info mt66xx_chip_info_soc5_0 = {
 	.u4UmacWtblDUAddr = CONNAC2X_WIFI_UWTBL_BASE,
 	.wmmcupwron = wf_pwr_on_consys_mcu,
 	.wmmcupwroff = wf_pwr_off_consys_mcu,
-#if CFG_SUPPORT_LLS
-	.is_supported_full_lls = TRUE,
-#endif
 #if (CFG_POWER_ON_DOWNLOAD_EMI_ROM_PATCH == 1)
 	.pwrondownload = soc5_0_wlanPowerOnDownload,
 #else
@@ -684,10 +679,11 @@ static void soc5_0_ConstructFirmwarePrio(struct GLUE_INFO *prGlueInfo,
 
 		/* Type 1. WIFI_RAM_CODE_soc5_0_1_1.bin */
 		ret = kalSnprintf(*(apucName + (*pucNameIdx)),
-				CFG_FW_NAME_MAX_LEN, "%s_%u%s_1.bin",
+				CFG_FW_NAME_MAX_LEN, "%s_%u%s_%u.bin",
 				apucsoc5_0FwName[ucIdx],
 				CFG_WIFI_IP_SET,
-				aucFlavor);
+				aucFlavor,
+				1);
 		if (ret >= 0 && ret < CFG_FW_NAME_MAX_LEN)
 			(*pucNameIdx) += 1;
 		else
@@ -780,11 +776,19 @@ static void soc5_0asicConnac2xProcessTxInterrupt(
 	rIntrStatus = (union WPDMA_INT_STA_STRUCT)prHifInfo->u4IntStatus;
 	if (rIntrStatus.field_conn2x_single.wfdma0_tx_done_16)
 		halWpdmaProcessCmdDmaDone(
+#if CFG_TRI_TX_RING
+			prAdapter->prGlueInfo, TX_RING_FWDL_IDX_5);
+#else
 			prAdapter->prGlueInfo, TX_RING_FWDL_IDX_4);
+#endif
 
 	if (rIntrStatus.field_conn2x_single.wfdma0_tx_done_17)
 		halWpdmaProcessCmdDmaDone(
+#if CFG_TRI_TX_RING
+			prAdapter->prGlueInfo, TX_RING_CMD_IDX_4);
+#else
 			prAdapter->prGlueInfo, TX_RING_CMD_IDX_3);
+#endif
 
 	if (rIntrStatus.field_conn2x_single.wfdma0_tx_done_0) {
 		halWpdmaProcessDataDmaDone(
@@ -904,7 +908,7 @@ static void soc5_0asicConnac2xWfdmaManualPrefetch(
 	}
 	HAL_MCR_WR(prAdapter,
 		   WF_WFDMA_HOST_DMA0_WPDMA_TX_RING18_EXT_CTRL_ADDR,
-		   0x04000004);
+		   u4WrVal);
 	u4WrVal += 0x00400000;
 
 	/* fill last dummy ring */
@@ -1021,6 +1025,8 @@ static void soc5_0asicConnac2xWpdmaConfig(struct GLUE_INFO *prGlueInfo,
 	struct ADAPTER *prAdapter = prGlueInfo->prAdapter;
 	union WPDMA_GLO_CFG_STRUCT GloCfg;
 	uint32_t u4DmaCfgCr;
+	struct BUS_INFO *prBusInfo =
+			prGlueInfo->prAdapter->chip_info->bus_info;
 
 	asicConnac2xWfdmaControl(prGlueInfo, 0, enable);
 	u4DmaCfgCr = asicConnac2xWfdmaCfgAddrGet(prGlueInfo, 0);
@@ -1032,6 +1038,8 @@ static void soc5_0asicConnac2xWpdmaConfig(struct GLUE_INFO *prGlueInfo,
 		u4DmaCfgCr = asicConnac2xWfdmaCfgAddrGet(prGlueInfo, 0);
 		GloCfg.field_conn2x.tx_dma_en = 1;
 		GloCfg.field_conn2x.rx_dma_en = 1;
+		GloCfg.field_conn2x.pdma_addr_ext_en =
+			(prBusInfo->u4DmaMask > 32) ? 1 : 0;
 		HAL_MCR_WR(prAdapter, u4DmaCfgCr, GloCfg.word);
 		configWfdmaRxRingThreshold(prAdapter);
 	}
@@ -2679,23 +2687,22 @@ static int soc5_0_CheckBusHang(void *adapter, uint8_t ucWfResetEnable)
 	} while (FALSE);
 
 	if (ret > 0) {
-		if ((conninfra_hang_ret != CONNINFRA_ERR_RST_ONGOING) &&
+		if (conninfra_reg_readable_for_coredump() == 1 ||
+			((conninfra_hang_ret != CONNINFRA_ERR_RST_ONGOING) &&
 			(conninfra_hang_ret != CONNINFRA_INFRA_BUS_HANG) &&
 			(conninfra_hang_ret !=
 				CONNINFRA_AP2CONN_RX_SLP_PROT_ERR) &&
 			(conninfra_hang_ret !=
 				CONNINFRA_AP2CONN_TX_SLP_PROT_ERR) &&
-			(conninfra_hang_ret != CONNINFRA_AP2CONN_CLK_ERR))
+			(conninfra_hang_ret != CONNINFRA_AP2CONN_CLK_ERR)))
 			soc5_0_DumpHostCr(prAdapter);
 
 		if (conninfra_reset) {
 			g_IsWfsysBusHang = TRUE;
-			conninfra_trigger_whole_chip_rst(CONNDRV_TYPE_WIFI,
-				"bus hang");
+			glResetWholeChipResetTrigger("bus hang");
 		} else if (ucWfResetEnable) {
 			g_IsWfsysBusHang = TRUE;
-			conninfra_trigger_whole_chip_rst(CONNDRV_TYPE_WIFI,
-				"wifi bus hang");
+			glResetWholeChipResetTrigger("wifi bus hang");
 		}
 	}
 

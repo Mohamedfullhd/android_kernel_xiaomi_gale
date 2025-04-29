@@ -179,8 +179,10 @@ void gps_lna_pin_ctrl(enum gps_data_link_id_enum link_id, bool dsp_is_on, bool f
 
 static int gps_lna_probe(struct platform_device *pdev)
 {
-	gps_stp_get_reserved_memory_lk(&pdev->dev);
-
+	gps_stp_get_md_status(&pdev->dev);
+	gps_emi_mpu_region_param_ready = 0;
+	if (gps_emi_get_reserved_memory(&pdev->dev) != -1)
+		gps_emi_mpu_region_param_ready = 1;
 	g_gps_lna_pinctrl_ptr = devm_pinctrl_get(&pdev->dev);
 	if (IS_ERR(g_gps_lna_pinctrl_ptr))
 		GPS_INFO_FUNC("devm_pinctrl_get fail");

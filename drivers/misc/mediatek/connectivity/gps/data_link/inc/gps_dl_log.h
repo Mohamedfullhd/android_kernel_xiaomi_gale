@@ -9,19 +9,19 @@
 #include "gps_dl_config.h"
 #if GPS_DL_ON_LINUX
 #include <linux/printk.h>
-#define __GDL_LOGE(mod, fmt, ...) pr_info("GDL[E:%d] [%s:%d]: "fmt, \
+#define __GDL_LOGE(mod, fmt, ...) pr_notice("GDL[E:%d] [%s:%d]: "fmt, \
 	mod, __func__, __LINE__, ##__VA_ARGS__)
-#define __GDL_LOGW(mod, fmt, ...) pr_info("GDL[W:%d] [%s:%d]: "fmt, \
+#define __GDL_LOGW(mod, fmt, ...) pr_notice("GDL[W:%d] [%s:%d]: "fmt, \
 	mod, __func__, __LINE__, ##__VA_ARGS__)
 #define __GDL_LOGI(mod, fmt, ...) pr_info("GDL[I:%d] [%s:%d]: "fmt, \
 	mod, __func__, __LINE__, ##__VA_ARGS__)
 #define __GDL_LOGD(mod, fmt, ...) pr_info("GDL[D:%d] [%s:%d]: "fmt, \
 	mod, __func__, __LINE__, ##__VA_ARGS__)
 
-#define __GDL_LOGXE(mod, link_id, fmt, ...) pr_info("GDL-%d[E:%d] [%s:%d]: "fmt, \
+#define __GDL_LOGXE(mod, link_id, fmt, ...) pr_notice("GDL-%d[E:%d] [%s:%d]: "fmt, \
 	link_id, mod, __func__, __LINE__, ##__VA_ARGS__)
 
-#define __GDL_LOGXW(mod, link_id, fmt, ...) pr_info("GDL-%d[W:%d] [%s:%d]: "fmt, \
+#define __GDL_LOGXW(mod, link_id, fmt, ...) pr_notice("GDL-%d[W:%d] [%s:%d]: "fmt, \
 	link_id, mod, __func__, __LINE__, ##__VA_ARGS__)
 
 #define __GDL_LOGXI(mod, link_id, fmt, ...) pr_info("GDL-%d[I:%d] [%s:%d]: "fmt, \

@@ -133,8 +133,7 @@ extern const uint8_t *apucNetworkType[NETWORK_TYPE_NUM];
 #define IS_BSS_INDEX_VALID(_ucBssIndex)     ((_ucBssIndex) <= P2P_DEV_BSS_INDEX)
 
 #define GET_BSS_INFO_BY_INDEX(_prAdapter, _ucBssIndex) \
-	(IS_BSS_INDEX_VALID(_ucBssIndex) ? \
-		(_prAdapter)->aprBssInfo[(_ucBssIndex)] : NULL)
+	((_prAdapter)->aprBssInfo[(_ucBssIndex)])
 
 #define bssAssignAssocID(_prStaRec)         ((_prStaRec)->ucIndex + 1)
 
@@ -174,11 +173,6 @@ void bssDumpBssInfo(IN struct ADAPTER *prAdapter,
 void bssDetermineApBssInfoPhyTypeSet(IN struct ADAPTER
 				     *prAdapter, IN u_int8_t fgIsPureAp,
 				     OUT struct BSS_INFO *prBssInfo);
-
-void bssUpdateStaRecFromBssDesc(struct ADAPTER *prAdapter,
-				struct BSS_DESC *prBssDesc,
-				struct STA_RECORD *prStaRec);
-
 int8_t bssGetRxNss(IN struct ADAPTER *prAdapter,
 	IN struct BSS_DESC *prBssDesc);
 #if CFG_SUPPORT_IOT_AP_BLACKLIST

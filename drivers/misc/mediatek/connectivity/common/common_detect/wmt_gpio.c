@@ -412,14 +412,14 @@ INT32 wmt_gpio_init(struct platform_device *pdev)
 					gpio_ctrl_info.gpio_ctrl_state[GPIO_CHIP_DEEP_SLEEP_PIN].
 					gpio_state[GPIO_IN_DIS]);
 		} else
-			pr_info("wmt_gpio:it may not be 6632 project, GPIO_CHIP_DEEP_SLEEP_PIN no need config!\n");
+			pr_warn("wmt_gpio:it may not be 6632 project, GPIO_CHIP_DEEP_SLEEP_PIN no need config!\n");
 
 		if (gpio_ctrl_info.gpio_ctrl_state[GPIO_CHIP_WAKE_UP_PIN].gpio_state[GPIO_PULL_UP]) {
 			pinctrl_select_state(gpio_ctrl_info.pinctrl_info,
 					gpio_ctrl_info.gpio_ctrl_state[GPIO_CHIP_WAKE_UP_PIN].
 					gpio_state[GPIO_PULL_UP]);
 		} else
-			pr_info("wmt_gpio:it may not be 6632 project, GPIO_CHIP_WAKE_UP_PIN no need config!\n");
+			pr_warn("wmt_gpio:it may not be 6632 project, GPIO_CHIP_WAKE_UP_PIN no need config!\n");
 
 		pr_info("wmt_gpio: gpio init done!\n");
 	} else {

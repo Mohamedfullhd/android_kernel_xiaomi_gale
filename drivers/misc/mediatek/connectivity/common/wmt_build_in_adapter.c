@@ -36,13 +36,6 @@
  ******************************************************************************/
 static unsigned int gConnAdpDbgLvl = CONNADP_LOG_INFO;
 
-#ifndef CONFIG_MTK_CONNECTIVITY_LOG
-#define CONNADP_LOUD_FUNC(fmt, arg...)
-#define CONNADP_DBG_FUNC(fmt, arg...)
-#define CONNADP_INFO_FUNC(fmt, arg...)
-#define CONNADP_WARN_FUNC(fmt, arg...)
-#define CONNADP_ERR_FUNC(fmt, arg...)
-#else
 #define CONNADP_LOUD_FUNC(fmt, arg...) \
 do { \
 	if (gConnAdpDbgLvl >= CONNADP_LOG_LOUD) \
@@ -68,7 +61,7 @@ do { \
 	if (gConnAdpDbgLvl >= CONNADP_LOG_ERR) \
 		pr_info("[E]%s(%d):"  fmt, __func__, __LINE__, ##arg); \
 } while (0)
-#endif
+
 /* device node related macro */
 #define CONN_DBG_DEV_NUM 1
 #define CONN_DBG_DRVIER_NAME "conn_dbg_drv"
@@ -89,14 +82,24 @@ static struct wmt_platform_bridge bridge;
 ssize_t conn_dbg_dev_write(struct file *filp, const char __user *buffer,
 				size_t count, loff_t *f_pos)
 {
-	if (bridge.debug_cb)
-		return bridge.debug_cb(filp, buffer, count, f_pos);
+	if (bridge.debug_write_cb)
+		return bridge.debug_write_cb(filp, buffer, count, f_pos);
+
+	return 0;
+}
+
+ssize_t conn_dbg_dev_read(struct file *filp, char __user *buffer,
+				size_t count, loff_t *f_pos)
+{
+	if (bridge.debug_read_cb)
+		return bridge.debug_read_cb(filp, buffer, count, f_pos);
 
 	return 0;
 }
 
 const struct file_operations gConnDbgDevFops = {
 	.write = conn_dbg_dev_write,
+	.read = conn_dbg_dev_read,
 };
 
 static int conn_dbg_dev_init(void)
@@ -180,8 +183,9 @@ void wmt_export_platform_bridge_register(struct wmt_platform_bridge *cb)
 	bridge.conninfra_reg_readable_cb = cb->conninfra_reg_readable_cb;
 	bridge.conninfra_reg_is_bus_hang_cb = cb->conninfra_reg_is_bus_hang_cb;
 
-	if (cb->debug_cb != NULL) {
-		bridge.debug_cb = cb->debug_cb;
+	if (cb->debug_write_cb != NULL && cb->debug_read_cb != NULL) {
+		bridge.debug_write_cb = cb->debug_write_cb;
+		bridge.debug_read_cb = cb->debug_read_cb;
 		conn_dbg_dev_init();
 	}
 
@@ -191,7 +195,7 @@ EXPORT_SYMBOL(wmt_export_platform_bridge_register);
 
 void wmt_export_platform_bridge_unregister(void)
 {
-	if (bridge.debug_cb)
+	if (bridge.debug_write_cb && bridge.debug_read_cb)
 		conn_dbg_dev_deinit();
 	memset(&bridge, 0, sizeof(struct wmt_platform_bridge));
 	CONNADP_INFO_FUNC("\n");

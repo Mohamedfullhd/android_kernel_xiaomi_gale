@@ -39,7 +39,11 @@ enum FW_LOG_MODE {
 	LOG_TO_FILE = 1,
 };
 
+#ifdef CONFIG_MTK_CONNSYS_DEDICATED_LOG_PATH
+static atomic_t log_mode  = ATOMIC_INIT(LOG_TO_FILE);
+#else
 static atomic_t log_mode  = ATOMIC_INIT(PRINT_TO_KERNEL_LOG);
+#endif
 
 #define CONNLOG_ALARM_STATE_DISABLE	0x0
 #define CONNLOG_ALARM_STATE_ENABLE	0x01
@@ -255,6 +259,9 @@ static void connlog_ring_emi_to_cache(int conn_type)
 	static DEFINE_RATELIMIT_STATE(_rs, 10 * HZ, 1);
 	static DEFINE_RATELIMIT_STATE(_rs2, HZ, 1);
 
+	ratelimit_set_flags(&_rs, RATELIMIT_MSG_ON_RELEASE);
+	ratelimit_set_flags(&_rs2, RATELIMIT_MSG_ON_RELEASE);
+
 	if (conn_type < 0 || conn_type >= CONNLOG_TYPE_END)
 		return;
 
@@ -263,7 +270,7 @@ static void connlog_ring_emi_to_cache(int conn_type)
 
 	if (RING_FULL(ring_cache)) {
 		if (__ratelimit(&_rs))
-			pr_info("%s cache is full.\n", type_to_title[conn_type]);
+			pr_warn("%s cache is full.\n", type_to_title[conn_type]);
 		return;
 	}
 
@@ -714,6 +721,9 @@ static void connlog_log_data_handler(struct work_struct *work)
 	static DEFINE_RATELIMIT_STATE(_rs, 10 * HZ, 1);
 	static DEFINE_RATELIMIT_STATE(_rs2, 2 * HZ, 1);
 
+	ratelimit_set_flags(&_rs, RATELIMIT_MSG_ON_RELEASE);
+	ratelimit_set_flags(&_rs2, RATELIMIT_MSG_ON_RELEASE);
+
 	do {
 		ret = 0;
 		for (i = 0; i < CONNLOG_TYPE_END; i++) {
@@ -788,7 +798,7 @@ static int connlog_eirq_init(const struct connlog_irq_config *irq_config)
 	if (gDev.conn2ApIrqId == 0)
 		gDev.conn2ApIrqId = irq_config->irq_num;
 	else {
-		pr_info("IRQ has been initialized\n");
+		pr_warn("IRQ has been initialized\n");
 		return -1;
 	}
 
@@ -873,7 +883,7 @@ static int connlog_emi_init(phys_addr_t emi_base, const struct connlog_emi_confi
 	}
 
 	if (gDev.phyAddrEmiBase) {
-		pr_info("emi base address has been initialized\n");
+		pr_warn("emi base address has been initialized\n");
 		return -2;
 	}
 
@@ -1178,7 +1188,7 @@ ssize_t connsys_log_read(int conn_type, char *buf, size_t count)
 	if (atomic_read(&log_mode) != LOG_TO_FILE)
 		goto done;
 
-	size = (unsigned int)(count < RING_SIZE(ring) ? count : RING_SIZE(ring));
+	size = count < RING_SIZE(ring) ? count : RING_SIZE(ring);
 	if (RING_EMPTY(ring) || !ring_read_prepare(size, &ring_seg, ring)) {
 		pr_err("type(%d) no data, possibly taken by concurrent reader.\n", conn_type);
 		goto done;
@@ -1216,6 +1226,8 @@ ssize_t connsys_log_read_to_user(int conn_type, char __user *buf, size_t count)
 	struct ring_segment ring_seg;
 	struct ring *ring;
 	unsigned int size = 0;
+
+	ratelimit_set_flags(&_rs, RATELIMIT_MSG_ON_RELEASE);
 
 	if (conn_type < 0 || conn_type >= CONNLOG_TYPE_END)
 		return 0;
@@ -1359,17 +1371,16 @@ int connsys_dedicated_log_get_log_mode(void)
 int connsys_dedicated_log_set_ap_state(int state)
 {
 	if (!gDev.virAddrEmiLogBase) {
-		pr_info("%s gDev.virAddrEmiLogBase is NULL\n", __func__);
+		pr_notice("%s gDev.virAddrEmiLogBase is NULL\n", __func__);
 		return -1;
 	}
 
 	if (state < 0 || state > 1) {
-		pr_info("%s state = %d is unexpected\n", __func__, state);
+		pr_notice("%s state = %d is unexpected\n", __func__, state);
 		return -1;
 	}
 
 	EMI_WRITE32(gDev.virAddrEmiLogBase + 32,  state);
-	pr_info("%s state: %d\n", __func__, state);
 	return 0;
 }
 

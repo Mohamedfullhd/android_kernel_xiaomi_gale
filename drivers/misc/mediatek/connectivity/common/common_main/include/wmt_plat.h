@@ -62,7 +62,7 @@ do { \
 #define WMT_PLAT_PR_WARN(fmt, arg...) \
 do { \
 	if (wmtPlatLogLvl >= WMT_PLAT_LOG_WARN) \
-		pr_info(DFT_TAG "[W]%s:"  fmt, __func__, ##arg); \
+		pr_warn(DFT_TAG "[W]%s:"  fmt, __func__, ##arg); \
 } while (0)
 #define WMT_PLAT_PR_ERR(fmt, arg...) \
 do { \
@@ -126,6 +126,9 @@ typedef enum _ENUM_PIN_ID_ {
 #if CFG_WMT_LTE_COEX_HANDLING
 	PIN_TDM_REQ = 14,
 #endif
+/* begin ,prize-lifenfen-20181211, add FM_LNA_EN */
+	PIN_FM_LNA = 15,
+/* end ,prize-lifenfen-20181211, add FM_LNA_EN */
 	PIN_ID_MAX
 } ENUM_PIN_ID, *P_ENUM_PIN_ID;
 #if 0

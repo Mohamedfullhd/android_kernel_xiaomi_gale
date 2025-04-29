@@ -429,7 +429,6 @@ VOID osal_op_history_init(struct osal_op_history *log_history, INT32 queue_size)
 VOID osal_op_history_save(struct osal_op_history *log_history, P_OSAL_OP pOp);
 VOID osal_op_history_print(struct osal_op_history *log_history, PINT8 name);
 
-INT32 osal_file_read(struct file *file, PUINT8 data, UINT32 size, UINT64 offset);
 /*******************************************************************************
 *                              F U N C T I O N S
 ********************************************************************************

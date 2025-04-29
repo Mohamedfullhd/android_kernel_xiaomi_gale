@@ -54,6 +54,7 @@
 #define ALLOCATE_CONNSYS_EMI_FROM_KO 1
 #endif
 
+#include <linux/suspend.h>
 #include <linux/thermal.h>
 #include "connsys_debug_utility.h"
 
@@ -73,8 +74,8 @@
 */
 static INT32 mtk_wmt_probe(struct platform_device *pdev);
 static INT32 mtk_wmt_remove(struct platform_device *pdev);
-static INT32 mtk_wmt_suspend(struct device *dev);
-static INT32 mtk_wmt_resume(struct device *dev);
+static int mtk_wmt_suspend(void);
+static int mtk_wmt_resume(void);
 
 /*******************************************************************************
 *                            P U B L I C   D A T A
@@ -94,6 +95,9 @@ EXPORT_SYMBOL(gConEmiSize);
 #endif
 
 UINT32 gps_lna_pin_num = 0xffffffff;
+/* end ,prize-lifenfen-20181211, add FM_LNA_EN */
+UINT32 fm_lna_pin_num = 0xffffffff;
+/* begin ,prize-lifenfen-20181211, add FM_LNA_EN */
 
 INT32 chip_reset_status = -1;
 static INT32 wifi_ant_swap_gpio_pin_num;
@@ -105,6 +109,8 @@ static atomic64_t g_sleep_counter_enable = ATOMIC64_INIT(1);
 static OSAL_UNSLEEPABLE_LOCK g_sleep_counter_spinlock;
 
 static atomic_t g_probe_called = ATOMIC_INIT(0);
+
+static struct notifier_block connsys_pm_notifier;
 
 #ifdef CONFIG_OF
 
@@ -119,8 +125,10 @@ WMT_CONSYS_IC_OPS __weak consys_ic_ops_mt6779 = {};
 WMT_CONSYS_IC_OPS __weak consys_ic_ops_mt6768 = {};
 WMT_CONSYS_IC_OPS __weak consys_ic_ops_mt6785 = {};
 WMT_CONSYS_IC_OPS __weak consys_ic_ops_mt6781 = {};
+WMT_CONSYS_IC_OPS __weak consys_ic_ops_mt6789 = {};
 WMT_CONSYS_IC_OPS __weak consys_ic_ops_mt6833 = {};
 WMT_CONSYS_IC_OPS __weak consys_ic_ops_mt6853 = {};
+WMT_CONSYS_IC_OPS __weak consys_ic_ops_mt6855 = {};
 WMT_CONSYS_IC_OPS __weak consys_ic_ops_mt6873 = {};
 WMT_CONSYS_IC_OPS __weak consys_ic_ops_mt8168 = {};
 
@@ -136,19 +144,16 @@ const struct of_device_id apwmt_of_ids[] = {
 	{.compatible = "mediatek,mt6768-consys", .data = &consys_ic_ops_mt6768},
 	{.compatible = "mediatek,mt6785-consys", .data = &consys_ic_ops_mt6785},
 	{.compatible = "mediatek,mt6781-consys", .data = &consys_ic_ops_mt6781},
+	{.compatible = "mediatek,mt6789-consys", .data = &consys_ic_ops_mt6789},
 	{.compatible = "mediatek,mt6833-consys", .data = &consys_ic_ops_mt6833},
 	{.compatible = "mediatek,mt6853-consys", .data = &consys_ic_ops_mt6853},
+	{.compatible = "mediatek,mt6855-consys", .data = &consys_ic_ops_mt6855},
 	{.compatible = "mediatek,mt6873-consys", .data = &consys_ic_ops_mt6873},
 	{.compatible = "mediatek,mt8168-consys", .data = &consys_ic_ops_mt8168},
 	{}
 };
 struct CONSYS_BASE_ADDRESS conn_reg;
 #endif
-
-static const struct dev_pm_ops wmt_drv_pm_ops = {
-	.suspend_noirq = mtk_wmt_suspend,
-	.resume_noirq = mtk_wmt_resume,
-};
 
 static struct platform_driver mtk_wmt_dev_drv = {
 	.probe = mtk_wmt_probe,
@@ -159,7 +164,6 @@ static struct platform_driver mtk_wmt_dev_drv = {
 #ifdef CONFIG_OF
 		   .of_match_table = apwmt_of_ids,
 #endif
-		   .pm = &wmt_drv_pm_ops,
 		   },
 };
 
@@ -288,15 +292,55 @@ static INT32 wmt_allocate_connsys_emi(struct platform_device *pdev)
 
 	gConEmiPhyBase = rmem->base;
 	gConEmiSize = rmem->size;
+	WMT_PLAT_PR_INFO("%s emi_addr 0x%pa, emi_size %llu\n", __func__, &gConEmiPhyBase, gConEmiSize);
+#endif
+	return 0;
+}
+
+static int wmt_allocate_connsys_emi_by_lk2(struct platform_device *pdev)
+{
+#ifdef ALLOCATE_CONNSYS_EMI_FROM_KO
+	struct device_node *node;
+	unsigned int phy_addr = 0;
+	unsigned int phy_size = 0;
+
+	node = pdev->dev.of_node;
+	if (!node) {
+		WMT_PLAT_PR_INFO("%s: unable to get consys node\n", __func__);
+		return -1;
+	}
+
+	if (of_property_read_u32(node, "emi-addr", &phy_addr)) {
+		WMT_PLAT_PR_INFO("%s: unable to get emi_addr\n", __func__);
+		return -1;
+	}
+
+	if (of_property_read_u32(node, "emi-size", &phy_size)) {
+		WMT_PLAT_PR_INFO("%s: unable to get emi_size\n", __func__);
+		return -1;
+	}
+
+	WMT_PLAT_PR_INFO("%s emi_addr %x, emi_size %x\n", __func__, phy_addr, phy_size);
+	gConEmiPhyBase = phy_addr;
+	gConEmiSize = phy_size;
 #endif
 	return 0;
 }
 
 static int wmt_thermal_get_temp_cb(void *data, int *temp)
 {
+#define MAX_PRINT_TEMP     70000 /* Max temperature for print log */
+
+	int temp_tm = 0;
+
 	if (temp) {
-		*temp = wmt_lib_tm_temp_query() * 1000;
-		WMT_PLAT_PR_INFO("thermal = %d\n", *temp);
+		temp_tm = wmt_lib_tm_temp_query();
+		if (temp_tm != THERMAL_TEMP_INVALID)
+			temp_tm = temp_tm * 1000;
+		*temp = temp_tm;
+
+		if (temp_tm != THERMAL_TEMP_INVALID && temp_tm >= MAX_PRINT_TEMP)
+			WMT_PLAT_PR_INFO("thermal = %d\n", *temp);
 	}
 	return 0;
 }
@@ -340,7 +384,9 @@ static INT32 mtk_wmt_probe(struct platform_device *pdev)
 		return -1;
 	}
 
-	wmt_allocate_connsys_emi(pdev);
+	if (wmt_allocate_connsys_emi(pdev) < 0)
+		wmt_allocate_connsys_emi_by_lk2(pdev);
+
 	wmt_thermal_register(pdev);
 
 	if (wmt_consys_ic_ops->consys_ic_need_store_pdev) {
@@ -382,6 +428,10 @@ static INT32 mtk_wmt_probe(struct platform_device *pdev)
 			wmt_consys_ic_ops->consys_ic_emi_set_remapping_reg();
 		if (wmt_consys_ic_ops->consys_ic_emi_coredump_remapping)
 			wmt_consys_ic_ops->consys_ic_emi_coredump_remapping(&pEmibaseaddr, 1);
+#ifdef CONFIG_MTK_CONNSYS_DEDICATED_LOG_PATH
+		if (wmt_consys_ic_ops->consys_ic_dedicated_log_path_init)
+			wmt_consys_ic_ops->consys_ic_dedicated_log_path_init(pdev);
+#endif
 	} else {
 		WMT_PLAT_PR_ERR("consys emi memory address gConEmiPhyBase invalid\n");
 	}
@@ -420,6 +470,20 @@ static INT32 mtk_wmt_probe(struct platform_device *pdev)
 						   gps_lna_pin_num, pinmux);
 			}
 		}
+/* begin ,prize-lifenfen-20181211, add FM_LNA_EN */
+		pinctl_node = of_parse_phandle(pdev->dev.of_node, "pinctrl-4", 0);
+		if (pinctl_node) {
+			pins_node = of_get_child_by_name(pinctl_node, "pins_cmd_dat");
+			if (pins_node) {
+				pin_ret = of_property_read_u32(pins_node, "pinmux", &pinmux);
+				if (pin_ret)
+					pin_ret = of_property_read_u32(pins_node, "pins", &pinmux);
+				fm_lna_pin_num = (pinmux >> 8) & 0xff;
+				WMT_PLAT_PR_INFO("FM LNA gpio pin number:%d, pinmux:0x%08x.\n",
+						   fm_lna_pin_num, pinmux);
+			}
+		}
+/* end ,prize-lifenfen-20181211, add FM_LNA_EN */
 	}
 
 	wifi_ant_swap_gpio_pin_num = of_get_named_gpio(pdev->dev.of_node, "wifi_ant_swap_gpio", 0);
@@ -448,6 +512,10 @@ static INT32 mtk_wmt_remove(struct platform_device *pdev)
 			pm_runtime_disable(&pdev->dev);
 	}
 
+#ifdef CONFIG_MTK_CONNSYS_DEDICATED_LOG_PATH
+	if (wmt_consys_ic_ops->consys_ic_dedicated_log_path_deinit)
+		wmt_consys_ic_ops->consys_ic_dedicated_log_path_deinit();
+#endif
 	if (wmt_consys_ic_ops->consys_ic_emi_coredump_remapping)
 		wmt_consys_ic_ops->consys_ic_emi_coredump_remapping(&pEmibaseaddr, 0);
 
@@ -461,7 +529,7 @@ static INT32 mtk_wmt_remove(struct platform_device *pdev)
 	return 0;
 }
 
-static INT32 mtk_wmt_suspend(struct device *dev)
+static int mtk_wmt_suspend(void)
 {
 	WMT_PLAT_PR_INFO(" mtk_wmt_suspend !!");
 
@@ -516,13 +584,29 @@ static void plat_resume_handler(struct work_struct *work)
 	}
 }
 
-static INT32 mtk_wmt_resume(struct device *dev)
+static int mtk_wmt_resume(void)
 {
 	WMT_PLAT_PR_INFO(" mtk_wmt_resume !!");
 	schedule_work(&plt_resume_worker);
 	connsys_dedicated_log_set_ap_state(1);
 
 	return 0;
+}
+
+static int connsys_pm_notifier_callback(struct notifier_block *nb,
+		unsigned long event, void *dummy)
+{
+	switch (event) {
+	case PM_SUSPEND_PREPARE:
+		mtk_wmt_suspend();
+		break;
+	case PM_POST_SUSPEND:
+		mtk_wmt_resume();
+		break;
+	default:
+		break;
+	}
+	return NOTIFY_DONE;
 }
 
 INT32 mtk_wcn_consys_sleep_info_read_all_ctrl(P_CONSYS_STATE state)
@@ -693,6 +777,8 @@ INT32 mtk_wcn_consys_hw_reg_ctrl(UINT32 on, UINT32 co_clock_type)
 			wmt_consys_ic_ops->consys_ic_bus_timeout_config();
 		if (wmt_consys_ic_ops->consys_ic_set_mcu_mem_pdn_delay)
 			wmt_consys_ic_ops->consys_ic_set_mcu_mem_pdn_delay();
+		if (wmt_consys_ic_ops->consys_ic_bus_config_gps_access_tia)
+			wmt_consys_ic_ops->consys_ic_bus_config_gps_access_tia();
 		if (wmt_consys_ic_ops->consys_ic_hw_reset_bit_set)
 			wmt_consys_ic_ops->consys_ic_hw_reset_bit_set(DISABLE);
 
@@ -997,9 +1083,27 @@ INT32 mtk_wcn_consys_hw_init(VOID)
 		}
 	}
 
+	if (wmt_consys_ic_ops->consys_ic_pmic_register_device) {
+		iRet = wmt_consys_ic_ops->consys_ic_pmic_register_device();
+		if (iRet)
+			WMT_PLAT_PR_ERR("WMT PMIC registered failed(%d)\n", iRet);
+	}
+
+	if (wmt_consys_ic_ops->consys_ic_clock_register_device) {
+		iRet = wmt_consys_ic_ops->consys_ic_clock_register_device();
+		if (iRet)
+			WMT_PLAT_PR_ERR("WMT clock registered failed(%d)\n", iRet);
+	}
+
 #if WMT_DBG_SUPPORT
 	mtk_wcn_dump_util_init(mtk_wcn_consys_soc_chipid());
 #endif
+
+	connsys_pm_notifier.notifier_call = connsys_pm_notifier_callback;
+	iRet = register_pm_notifier(&connsys_pm_notifier);
+	if (iRet < 0)
+		pr_notice("[%s] register_pm_notifier fail %d\n", __func__, iRet);
+
 	return iRet;
 
 }
@@ -1020,6 +1124,7 @@ INT32 mtk_wcn_consys_hw_deinit(VOID)
 #endif
 
 	platform_driver_unregister(&mtk_wmt_dev_drv);
+	unregister_pm_notifier(&connsys_pm_notifier);
 
 	if (wmt_consys_ic_ops)
 		wmt_consys_ic_ops = NULL;
@@ -1133,6 +1238,12 @@ UINT32 mtk_consys_get_gps_lna_pin_num(VOID)
 	return gps_lna_pin_num;
 }
 
+/* begin ,prize-lifenfen-20181211, add FM_LNA_EN */
+UINT32 mtk_consys_get_fm_lna_pin_num(VOID)
+{
+	return fm_lna_pin_num;
+}
+/* end ,prize-lifenfen-20181211, add FM_LNA_EN */
 INT32 mtk_wcn_consys_reg_ctrl(UINT32 is_write, enum CONSYS_BASE_ADDRESS_INDEX index, UINT32 offset,
 		PUINT32 value)
 {
@@ -1347,9 +1458,41 @@ VOID mtk_wcn_consys_set_vcn33_1_voltage(UINT32 voltage)
 		wmt_consys_ic_ops->consys_ic_set_vcn33_1_voltage(voltage);
 }
 
+PVOID mtk_wcn_consys_clock_get_regmap(VOID)
+{
+	if (wmt_consys_ic_ops->consys_ic_clock_get_regmap)
+		return wmt_consys_ic_ops->consys_ic_clock_get_regmap();
+	return NULL;
+}
+
 UINT32 mtk_wcn_consys_wakeup_btif_irq_pull_low(VOID)
 {
 	if (wmt_consys_ic_ops->consys_ic_wakeup_btif_irq_pull_low)
 		return wmt_consys_ic_ops->consys_ic_wakeup_btif_irq_pull_low();
 	return 1;
+}
+
+INT32 mtk_wcn_consys_get_debug_reg_ary_size(VOID)
+{
+	if (wmt_consys_ic_ops == NULL)
+		wmt_consys_ic_ops = mtk_wcn_get_consys_ic_ops();
+
+	if (wmt_consys_ic_ops && wmt_consys_ic_ops->consys_ic_get_debug_reg_ary_size)
+		return *(wmt_consys_ic_ops->consys_ic_get_debug_reg_ary_size);
+	return 0;
+}
+
+P_REG_MAP_ADDR mtk_wcn_consys_get_debug_reg_ary(VOID)
+{
+	if (wmt_consys_ic_ops == NULL)
+		wmt_consys_ic_ops = mtk_wcn_get_consys_ic_ops();
+
+	if (wmt_consys_ic_ops && wmt_consys_ic_ops->consys_ic_get_debug_reg_ary)
+		return wmt_consys_ic_ops->consys_ic_get_debug_reg_ary;
+	return NULL;
+}
+
+struct platform_device *get_consys_device(void)
+{
+	return g_pdev;
 }

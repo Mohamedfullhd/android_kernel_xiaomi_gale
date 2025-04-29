@@ -225,7 +225,7 @@ struct APPEND_VAR_IE_ENTRY txProbRspIETable[] = {
 	   rlmGenerateMTKOuiIE}	/* 221 */
 #endif
 	, {(ELEM_HDR_LEN + ELEM_MAX_LEN_RSN), NULL,
-	   rsnGenerateRSNXIE}	/* 244 */
+	   rsnGenerateRSNXIE}   /* 244 */
 	, {(ELEM_HDR_LEN + ELEM_MAX_LEN_WPA), NULL,
 	   rsnGenerateOWEIE}
 };
@@ -282,10 +282,10 @@ void bssDetermineStaRecPhyTypeSet(IN struct ADAPTER *prAdapter,
 	uint8_t ucHeOption = FEATURE_ENABLED;
 
 	/* 802.11 AX blacklist */
-	if (queryAxBlocklist(prAdapter, prBssDesc->aucBSSID,
+	if (queryAxBlacklist(prAdapter, prBssDesc->aucBSSID,
 			     prStaRec->ucBssIndex, BLACKLIST_AX_TO_AC)) {
 		DBGLOG(BSS, INFO,
-		    "BSSID " MACSTR " is in AX blocklist!\n",
+		    "BSSID " MACSTR " is in AX blacklist!\n",
 		    MAC2STR(prBssDesc->aucBSSID));
 		prStaRec->ucPhyTypeSet =
 			prBssDesc->ucPhyTypeSet &= ~PHY_TYPE_BIT_HE;
@@ -528,13 +528,44 @@ struct STA_RECORD *bssCreateStaRecFromBssDesc(IN struct ADAPTER *prAdapter,
 		 * we may also reset the ucJoinFailureCount to 0.
 		 */
 	}
+	/* 4 <2> Update information from BSS_DESC_T to current P_STA_RECORD_T */
+	prStaRec->u2CapInfo = prBssDesc->u2CapInfo;
 
-	/* 4 <2,3> Update information from BSS_DESC to current P_STA_RECORD */
-	bssUpdateStaRecFromBssDesc(prAdapter, prBssDesc, prStaRec);
+	prStaRec->u2OperationalRateSet = prBssDesc->u2OperationalRateSet;
+	prStaRec->u2BSSBasicRateSet = prBssDesc->u2BSSBasicRateSet;
 
-	/* Check for Target BSS's non HT Phy Types */
+#if 1
+	bssDetermineStaRecPhyTypeSet(prAdapter, prBssDesc, prStaRec);
+#else
+	prStaRec->ucPhyTypeSet = prBssDesc->ucPhyTypeSet;
+
+	if (IS_STA_IN_AIS(prStaRec)) {
+		if (!
+		    ((prConnSettings->eEncStatus ==
+		      ENUM_ENCRYPTION3_ENABLED)
+		     || (prConnSettings->eEncStatus ==
+			 ENUM_ENCRYPTION3_KEY_ABSENT)
+		     || (prConnSettings->eEncStatus ==
+			 ENUM_ENCRYPTION_DISABLED)
+		     || (prAdapter->prGlueInfo->u2WSCAssocInfoIELen)
+#if CFG_SUPPORT_WAPI
+		     || (prAdapter->prGlueInfo->u2WapiAssocInfoIESz)
+#endif
+)) {
+			DBGLOG(BSS, INFO,
+			       "Ignore the HT Bit for TKIP as pairwise cipher configed!\n");
+			prStaRec->ucPhyTypeSet &= ~PHY_TYPE_BIT_HT;
+		}
+	}
+
+	prStaRec->ucDesiredPhyTypeSet =
+	    prStaRec->ucPhyTypeSet & prAdapter->rWifiVar.ucAvailablePhyTypeSet;
+#endif
+
 	ucNonHTPhyTypeSet =
 	    prStaRec->ucDesiredPhyTypeSet & PHY_TYPE_SET_802_11ABG;
+
+	/* Check for Target BSS's non HT Phy Types */
 	if (ucNonHTPhyTypeSet) {
 
 		if (ucNonHTPhyTypeSet & PHY_TYPE_BIT_ERP) {
@@ -564,6 +595,18 @@ struct STA_RECORD *bssCreateStaRecFromBssDesc(IN struct ADAPTER *prAdapter,
 	    (prStaRec->
 	     u2OperationalRateSet & prConnSettings->u2DesiredNonHTRateSet);
 
+	/* 4 <3> Update information from BSS_DESC_T to current P_STA_RECORD_T */
+	if (IS_AP_STA(prStaRec)) {
+		/* do not need to parse IE for DTIM,
+		 * which have been parsed before inserting into struct BSS_DESC
+		 */
+		if (prBssDesc->ucDTIMPeriod)
+			prStaRec->ucDTIMPeriod = prBssDesc->ucDTIMPeriod;
+		else
+			prStaRec->ucDTIMPeriod = 0;
+		/* Means that TIM was not parsed. */
+
+	}
 	/* 4 <4> Update default value */
 	prStaRec->fgDiagnoseConnection = FALSE;
 
@@ -1130,13 +1173,6 @@ uint32_t bssUpdateBeaconContentEx(IN struct ADAPTER *prAdapter,
 	DBGLOG(INIT, LOUD, "\n");
 
 	prBssInfo = GET_BSS_INFO_BY_INDEX(prAdapter, ucBssIndex);
-
-	if (!prBssInfo || !prBssInfo->fgIsInUse) {
-		DBGLOG(P2P, WARN,
-			"bss%d is not in used\n",
-			ucBssIndex);
-		return 0;
-	}
 
 	/* 4 <1> Allocate a PKT_INFO_T for Beacon Frame */
 	/* Allocate a MSDU_INFO_T */
@@ -2348,70 +2384,6 @@ void bssUpdateStaRecFromAssocReq(IN struct ADAPTER *prAdapter)
 
 }
 
-void bssUpdateStaRecFromBssDesc(struct ADAPTER *prAdapter,
-				struct BSS_DESC *prBssDesc,
-				struct STA_RECORD *prStaRec)
-{
-	struct BSS_INFO *prBssInfo;
-	uint8_t ucBssIndex;
-
-	if (!prBssDesc || !prStaRec)
-		return;
-
-	ucBssIndex = prStaRec->ucBssIndex;
-	prBssInfo = GET_BSS_INFO_BY_INDEX(prAdapter, ucBssIndex);
-	if (!prBssInfo) {
-		DBGLOG(BSS, ERROR, "prBssInfo is null\n");
-		return;
-	}
-
-	/* 4 <2> Update information from BSS_DESC_T to current P_STA_RECORD_T */
-	prStaRec->u2CapInfo = prBssDesc->u2CapInfo;
-
-	prStaRec->u2OperationalRateSet = prBssDesc->u2OperationalRateSet;
-	prStaRec->u2BSSBasicRateSet = prBssDesc->u2BSSBasicRateSet;
-
-#if 1
-	bssDetermineStaRecPhyTypeSet(prAdapter, prBssDesc, prStaRec);
-#else
-	prStaRec->ucPhyTypeSet = prBssDesc->ucPhyTypeSet;
-
-	if (IS_STA_IN_AIS(prStaRec)) {
-		if (!
-		    ((prConnSettings->eEncStatus ==
-		      ENUM_ENCRYPTION3_ENABLED)
-		     || (prConnSettings->eEncStatus ==
-			 ENUM_ENCRYPTION3_KEY_ABSENT)
-		     || (prConnSettings->eEncStatus ==
-			 ENUM_ENCRYPTION_DISABLED)
-		     || (prAdapter->prGlueInfo->u2WSCAssocInfoIELen)
-#if CFG_SUPPORT_WAPI
-		     || (prAdapter->prGlueInfo->u2WapiAssocInfoIESz)
-#endif
-)) {
-			DBGLOG(BSS, INFO,
-			       "Ignore the HT Bit for TKIP as pairwise cipher configed!\n");
-			prStaRec->ucPhyTypeSet &= ~PHY_TYPE_BIT_HT;
-		}
-	}
-
-	prStaRec->ucDesiredPhyTypeSet =
-	    prStaRec->ucPhyTypeSet & prAdapter->rWifiVar.ucAvailablePhyTypeSet;
-#endif
-
-	/* 4 <3> Update information from BSS_DESC_T to current P_STA_RECORD_T */
-	if (IS_AP_STA(prStaRec)) {
-		/* do not need to parse IE for DTIM,
-		 * which have been parsed before inserting into struct BSS_DESC
-		 */
-		if (prBssDesc->ucDTIMPeriod)
-			prStaRec->ucDTIMPeriod = prBssDesc->ucDTIMPeriod;
-		else
-			prStaRec->ucDTIMPeriod = 0;
-		/* Means that TIM was not parsed. */
-	}
-}
-
 void bssDumpBssInfo(IN struct ADAPTER *prAdapter, IN uint8_t ucBssIndex)
 {
 	struct BSS_INFO *prBssInfo;
@@ -2436,9 +2408,7 @@ void bssDumpBssInfo(IN struct ADAPTER *prAdapter, IN uint8_t ucBssIndex)
 	       MAC2STR(prBssInfo->aucOwnMacAddr), MAC2STR(prBssInfo->aucBSSID),
 	       HIDE(prBssInfo->aucSSID));
 
-	if (prBssInfo->eNetworkType >= 0
-			&& prBssInfo->eNetworkType < NETWORK_TYPE_NUM
-			&& prBssInfo->eCurrentOPMode >= 0
+	if (prBssInfo->eNetworkType < NETWORK_TYPE_NUM
 			&& prBssInfo->eCurrentOPMode < OP_MODE_NUM) {
 		DBGLOG(SW4, INFO,
 			"BSS IDX[%u] Type[%s] OPMode[%s] ConnState[%u] Absent[%u]\n",

@@ -22,6 +22,10 @@
 #include <linux/kthread.h>
 #include "wifi_pwr_on.h"
 
+
+
+
+
 MODULE_LICENSE("Dual BSD/GPL");
 
 #define PFX                         "[WIFI-FW] "
@@ -54,7 +58,8 @@ uint32_t DbgLevel = WIFI_FW_LOG_INFO;
 	} while (0)
 #define WIFI_ERR_FUNC(fmt, arg...)	\
 	do { \
-		pr_info(PFX "%s[E]: " fmt, __func__, ##arg); \
+		if (DbgLevel >= WIFI_FW_LOG_ERR) \
+			pr_info(PFX "%s[E]: " fmt, __func__, ##arg); \
 	} while (0)
 
 

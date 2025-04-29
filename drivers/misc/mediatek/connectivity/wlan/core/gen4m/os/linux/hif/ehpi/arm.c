@@ -304,7 +304,7 @@ int32_t glBusSetIrq(void *pvData, void *pfnIsr, void *pvCookie)
 			       IRQF_DISABLED | IRQF_SHARED | IRQF_TRIGGER_FALLING, pDev->name, pvCookie);
 
 	if (i4Status < 0)
-		pr_info("request_irq(%d) failed\n", pDev->irq);
+		pr_debug("request_irq(%d) failed\n", pDev->irq);
 	else
 		pr_info("request_irq(%d) success with dev_id(%x)\n", pDev->irq, (unsigned int)pvCookie);
 
@@ -523,7 +523,7 @@ static irqreturn_t glEhpiInterruptHandler(int irq, void *dev_id)
 	wlanISR(prGlueInfo->prAdapter, TRUE);
 
 	/* 1.1 Halt flag Checking */
-	if (prGlueInfo->ulFlag & GLUE_FLAG_HALT)
+	if (test_bit(GLUE_FLAG_HALT_BIT, &prGlueInfo->ulFlag))
 		return IRQ_HANDLED;
 
 	/* 2. Flag marking for interrupt */

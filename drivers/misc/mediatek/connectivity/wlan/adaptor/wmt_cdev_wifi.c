@@ -29,6 +29,10 @@
 #include <linux/inetdevice.h>
 #include <linux/string.h>
 
+#include "fw_log_wifi.h"
+#ifdef CONFIG_MTK_CONNSYS_DEDICATED_LOG_PATH
+#include "fw_log_ics.h"
+#endif
 #if (CFG_ANDORID_CONNINFRA_SUPPORT == 1)
 #include "wifi_pwr_on.h"
 #else
@@ -48,13 +52,6 @@ MODULE_LICENSE("Dual BSD/GPL");
 
 uint32_t gDbgLevel = WIFI_LOG_DBG;
 
-#ifndef CONFIG_MTK_CONNECTIVITY_LOG
-#define WIFI_DBG_FUNC(fmt, arg...)
-#define WIFI_INFO_FUNC(fmt, arg...)
-#define WIFI_INFO_FUNC_LIMITED(fmt, arg...)
-#define WIFI_WARN_FUNC(fmt, arg...)
-#define WIFI_ERR_FUNC(fmt, arg...)
-#else
 #define WIFI_DBG_FUNC(fmt, arg...)	\
 	do { \
 		if (gDbgLevel >= WIFI_LOG_DBG) \
@@ -77,9 +74,9 @@ uint32_t gDbgLevel = WIFI_LOG_DBG;
 	} while (0)
 #define WIFI_ERR_FUNC(fmt, arg...)	\
 	do { \
-		pr_info(PFX "%s[E]: " fmt, __func__, ##arg); \
+		if (gDbgLevel >= WIFI_LOG_ERR) \
+			pr_info(PFX "%s[E]: " fmt, __func__, ##arg); \
 	} while (0)
-#endif
 
 #define VERSION "2.0"
 
@@ -228,6 +225,23 @@ uint8_t get_pre_cal_status(void)
 }
 EXPORT_SYMBOL(get_pre_cal_status);
 #endif
+
+int32_t update_wr_mtx_down_up_status(uint8_t ucDownUp, uint8_t ucIsBlocking)
+{
+	if (ucDownUp == 0) {
+		WIFI_INFO_FUNC("Try to down wr_mtx\n");
+		if (ucIsBlocking == 1)
+			down(&wr_mtx);
+		else if (ucIsBlocking == 0)
+			return down_trylock(&wr_mtx);
+	} else if (ucDownUp == 1) {
+		up(&wr_mtx);
+		WIFI_INFO_FUNC("Up wr_mtx\n");
+	}
+
+	return 0;
+}
+EXPORT_SYMBOL(update_wr_mtx_down_up_status);
 
 enum ENUM_WLAN_DRV_BUF_TYPE_T {
 	BUF_TYPE_NVRAM,
@@ -408,7 +422,7 @@ ssize_t WIFI_write(struct file *filp, const char __user *buf, size_t count, loff
 	int copy_size = 0;
 
 	down(&wr_mtx);
-	if (count == 0) {
+	if (count <= 0) {
 		WIFI_ERR_FUNC("WIFI_write invalid param\n");
 		goto done;
 	}
@@ -825,6 +839,16 @@ static int WIFI_init(void)
 	WIFI_INFO_FUNC("%s driver(major %d %d) installed.\n", WIFI_DRIVER_NAME,
 			WIFI_major, MAJOR(wifi_devno));
 
+#ifdef CONFIG_MTK_CONNSYS_DEDICATED_LOG_PATH
+	if (fw_log_wifi_init() < 0) {
+		WIFI_INFO_FUNC("connsys debug node init failed!!\n");
+		goto error;
+	}
+	if (fw_log_ics_init() < 0) {
+		WIFI_INFO_FUNC("ics log node init failed!!\n");
+		goto error;
+	}
+#endif
 	return 0;
 
 error:
@@ -865,10 +889,16 @@ static void WIFI_exit(void)
 
 	WIFI_INFO_FUNC("%s driver removed\n", WIFI_DRIVER_NAME);
 
+#ifdef CONFIG_MTK_CONNSYS_DEDICATED_LOG_PATH
+	fw_log_wifi_deinit();
+	fw_log_ics_deinit();
+#endif
 #if (CFG_ANDORID_CONNINFRA_SUPPORT == 1)
 	wifi_pwr_on_deinit();
 #endif
 }
+
+#ifdef MTK_WCN_BUILT_IN_DRIVER
 
 int mtk_wcn_wmt_wifi_init(void)
 {
@@ -881,3 +911,10 @@ void mtk_wcn_wmt_wifi_exit(void)
 	return WIFI_exit();
 }
 EXPORT_SYMBOL(mtk_wcn_wmt_wifi_exit);
+
+#else
+
+module_init(WIFI_init);
+module_exit(WIFI_exit);
+
+#endif

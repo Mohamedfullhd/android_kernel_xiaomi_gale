@@ -75,20 +75,6 @@
  */
 #define WIFI_SER_SYNC_TIMER_TIMEOUT_IN_MS	(100)
 
-/**
- * These static compile options have been moved to wifi.cfg controlled by
- * "TRXDescDump" with bitmap settings:
- *   TXP(0x04),        TXDMAD(0x02), TXD(0x01),
- *   RXDSEGMENT(0x40), RXDMAD(0x20), RXD(0x10).
- *
- * #define CFG_DUMP_TXDMAD
- * #define CFG_DUMP_RXDMAD
- * #define CFG_DUMP_TXD
- * #define CFG_DUMP_TXP
- * #define CFG_DUMP_RXD
- * #define CFG_DUMP_RXD_SEGMENT
- */
-
 /*******************************************************************************
  *                             D A T A   T Y P E S
  *******************************************************************************
@@ -1175,7 +1161,7 @@ uint32_t halGetChipSwVer(IN struct ADAPTER *prAdapter);
 uint32_t halRxWaitResponse(IN struct ADAPTER *prAdapter,
 	IN uint8_t ucPortIdx, OUT uint8_t *pucRspBuffer,
 	IN uint32_t u4MaxRespBufferLen, OUT uint32_t *pu4Length,
-	IN uint32_t u4WaitingInterval);
+	IN uint32_t u4WaitingInterval, IN uint32_t u4TimeoutValue);
 
 void halEnableInterrupt(IN struct ADAPTER *prAdapter);
 void halDisableInterrupt(IN struct ADAPTER *prAdapter);
@@ -1239,14 +1225,11 @@ void halTxReturnFreeResource_v1(IN struct ADAPTER *prAdapter,
 	IN uint16_t *au2TxDoneCnt);
 uint8_t halTxRingDataSelect(IN struct ADAPTER *prAdapter,
 	IN struct MSDU_INFO *prMsduInfo);
-#ifdef CFG_PDMA_SLPPRT_MODE_SUPPORT
-void halPdmaSlpprotOp(IN struct GLUE_INFO *prGlueInfo,
-							IN uint8_t ucEnable);
-#endif
 void halUpdateTxMaxQuota(IN struct ADAPTER *prAdapter);
 void halNotifyMdCrash(IN struct ADAPTER *prAdapter);
-bool halIsTxBssCntFull(struct ADAPTER *prAdapter, uint8_t ucBssIndex);
-void halSetTxRingBssTokenCnt(struct ADAPTER *prAdapter, uint32_t u4Cnt);
+uint32_t halGetBssTxCredit(struct ADAPTER *prAdapter, uint8_t ucBssIndex);
+void halSetAdjustCtrl(struct ADAPTER *prAdapter, bool fgEn);
+void halAdjustBssTxCredit(struct ADAPTER *prAdapter, uint8_t ucBssIndex);
 
 #if defined(_HIF_USB)
 void halSerSyncTimerHandler(IN struct ADAPTER *prAdapter);

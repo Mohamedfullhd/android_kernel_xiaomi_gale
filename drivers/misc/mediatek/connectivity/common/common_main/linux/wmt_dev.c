@@ -56,6 +56,7 @@
 #endif
 #endif
 #include <linux/proc_fs.h>
+#include <linux/thermal.h>
 #include <mtk_wcn_cmb_stub.h>
 #include "osal_typedef.h"
 #include "osal.h"
@@ -120,6 +121,7 @@
 #define WMT_IOCTL_FW_PATCH_UPDATE_RST	_IOR(WMT_IOC_MAGIC, 34, int)
 #define WMT_IOCTL_GET_VENDOR_PATCH_NUM		_IOW(WMT_IOC_MAGIC, 35, int)
 #define WMT_IOCTL_GET_VENDOR_PATCH_VERSION	_IOR(WMT_IOC_MAGIC, 36, char*)
+#define WMT_IOCTL_SET_VENDOR_PATCH_VERSION	_IOW(WMT_IOC_MAGIC, 37, char*)
 #define WMT_IOCTL_GET_CHECK_PATCH_STATUS	_IOR(WMT_IOC_MAGIC, 38, int)
 #define WMT_IOCTL_SET_CHECK_PATCH_STATUS	_IOW(WMT_IOC_MAGIC, 39, int)
 #define WMT_IOCTL_SET_ACTIVE_PATCH_VERSION	_IOR(WMT_IOC_MAGIC, 40, char*)
@@ -175,7 +177,7 @@ struct device *wmt_dev;
 
 /*LCM on/off ctrl for wmt varabile*/
 UINT32 hif_info;
-UINT8 gWmtClose;
+UINT8 gWmtClose = 1;
 static struct work_struct gPwrOnOffWork;
 static atomic_t g_es_lr_flag_for_quick_sleep = ATOMIC_INIT(1); /* for ctrl quick sleep flag */
 static atomic_t g_es_lr_flag_for_lpbk_onoff = ATOMIC_INIT(0); /* for ctrl lpbk on off */
@@ -186,7 +188,6 @@ static atomic_t g_late_pwr_on_for_blank = ATOMIC_INIT(0); /* PwrOnOff Late flag 
 
 /* Prevent race condition when wmt_dev_tm_temp_query is called concurrently */
 static OSAL_UNSLEEPABLE_LOCK g_temp_query_spinlock;
-static OSAL_UNSLEEPABLE_LOCK g_patch_num_spinlock;
 
 #ifdef CONFIG_EARLYSUSPEND
 static VOID wmt_dev_early_suspend(struct early_suspend *h)
@@ -624,6 +625,9 @@ LONG wmt_dev_tm_temp_query(VOID)
 	LONG return_temp = 0;
 	INT8 query_cond = 0;
 
+	if (gWmtClose != 0)
+		return THERMAL_TEMP_INVALID;
+
 	/* Let us work on the copied version of function static variables */
 	osal_lock_unsleepable_lock(&g_temp_query_spinlock);
 	osal_memcpy(temp_table, s_temp_table, sizeof(s_temp_table));
@@ -809,7 +813,7 @@ ssize_t WMT_read(struct file *filp, char __user *buf, size_t count, loff_t *f_po
 	if (pCmd != NULL) {
 		cmdLen = osal_strlen(pCmd) < NAME_MAX ? osal_strlen(pCmd) : NAME_MAX;
 		if (cmdLen > count)
-			cmdLen = (UINT32)count;
+			cmdLen = count;
 		WMT_DBG_FUNC("cmd str(%s)\n", pCmd);
 		if (copy_to_user(buf, pCmd, cmdLen))
 			iRet = -EFAULT;
@@ -1077,14 +1081,8 @@ LONG WMT_unlocked_ioctl(struct file *filp, UINT32 cmd, ULONG arg)
 	case 10:
 		if (mtk_wcn_stp_coredump_start_get()) {
 			wmt_lib_host_awake_get();
-			if (wmt_detect_get_chip_type() == WMT_CHIP_TYPE_SOC) {
-				char buf[60];
-
-				if (copy_from_user(buf, (PVOID)arg, 60) == 0) {
-					buf[59] = '\0';
-					WMT_INFO_FUNC("coredump path: %s\n", buf);
-				}
-			}
+			if (wmt_detect_get_chip_type() == WMT_CHIP_TYPE_SOC)
+				WMT_INFO_FUNC("stp dump start.\n");
 			else {
 				WMT_INFO_FUNC("Trigger kernel api dump.\n");
 				if (wmt_detect_get_chip_type() == WMT_CHIP_TYPE_COMBO ||
@@ -1111,12 +1109,7 @@ LONG WMT_unlocked_ioctl(struct file *filp, UINT32 cmd, ULONG arg)
 	case 11:
 		if (mtk_wcn_stp_coredump_start_get()) {
 			if (wmt_detect_get_chip_type() == WMT_CHIP_TYPE_SOC) {
-				char buf[60];
-
-				if (copy_from_user(buf, (PVOID)arg, 60) == 0) {
-					buf[59] = '\0';
-					WMT_INFO_FUNC("emi_dump path: %s\n", buf);
-				}
+				WMT_INFO_FUNC("Dump connsys EMI done.\n");
 				mtk_stp_notify_emi_dump_end();
 			}
 			wmt_lib_host_awake_put();
@@ -1154,17 +1147,13 @@ LONG WMT_unlocked_ioctl(struct file *filp, UINT32 cmd, ULONG arg)
 			wmt_lib_set_stp_wmt_last_close(0);
 		break;
 	case WMT_IOCTL_SET_PATCH_NUM:
-		osal_lock_unsleepable_lock(&g_patch_num_spinlock);
 		if (arg == 0 || arg > MAX_PATCH_NUM || pAtchNum > 0) {
 			WMT_ERR_FUNC("patch num(%lu) == 0 or > %d or has set!\n", arg, MAX_PATCH_NUM);
 			iRet = -1;
-			osal_unlock_unsleepable_lock(&g_patch_num_spinlock);
 			break;
 		}
 
-		pAtchNum = (UINT32)arg;
-
-		osal_unlock_unsleepable_lock(&g_patch_num_spinlock);
+		pAtchNum = arg;
 
 		if (pPatchInfo == NULL)
 			pPatchInfo = kcalloc(pAtchNum, sizeof(WMT_PATCH_INFO), GFP_ATOMIC);
@@ -1388,6 +1377,24 @@ LONG WMT_unlocked_ioctl(struct file *filp, UINT32 cmd, ULONG arg)
 		break;
 	case WMT_IOCTL_GET_VENDOR_PATCH_NUM:
 		iRet = wmt_lib_get_vendor_patch_num();
+		break;
+	case WMT_IOCTL_SET_VENDOR_PATCH_VERSION:
+		do {
+			struct wmt_vendor_patch patch;
+
+			if (copy_from_user(&patch, (PVOID)arg,
+				sizeof(struct wmt_vendor_patch))) {
+				WMT_ERR_FUNC("copy_from_user failed at %d\n", __LINE__);
+				iRet = -EFAULT;
+				break;
+			}
+
+			iRet = wmt_lib_set_vendor_patch_version(&patch);
+			if (iRet) {
+				iRet = -EFAULT;
+				break;
+			}
+		} while (0);
 		break;
 	case WMT_IOCTL_GET_VENDOR_PATCH_VERSION:
 		do {
@@ -1625,7 +1632,12 @@ static INT32 WMT_init(VOID)
 	init_waitqueue_head((wait_queue_head_t *) &gWmtInitWq);
 
 	osal_unsleepable_lock_init(&g_temp_query_spinlock);
-	osal_unsleepable_lock_init(&g_patch_num_spinlock);
+
+#if (MTK_WCN_REMOVE_KO)
+	/* called in do_common_drv_init() */
+#else
+	mtk_wcn_hif_sdio_drv_init();
+#endif
 	stp_drv_init();
 
 	ret = register_chrdev_region(devID, WMT_DEV_NUM, WMT_DRIVER_NAME);
@@ -1722,6 +1734,13 @@ static INT32 WMT_init(VOID)
 #endif /* CONFIG_EARLYSUSPEND */
 	WMT_DBG_FUNC("success\n");
 
+#if (MTK_WCN_REMOVE_KO)
+	/* called in do_common_drv_init() */
+#else
+	mtk_wcn_stp_uart_drv_init();
+	mtk_wcn_stp_sdio_drv_init();
+#endif
+
 	return 0;
 
 error:
@@ -1761,7 +1780,6 @@ static VOID WMT_exit(VOID)
 		return;
 
 	osal_unsleepable_lock_deinit(&g_temp_query_spinlock);
-	osal_unsleepable_lock_deinit(&g_patch_num_spinlock);
 #ifdef CONFIG_EARLYSUSPEND
 	unregister_early_suspend(&wmt_early_suspend_handler);
 	WMT_INFO_FUNC("unregister_early_suspend finished\n");

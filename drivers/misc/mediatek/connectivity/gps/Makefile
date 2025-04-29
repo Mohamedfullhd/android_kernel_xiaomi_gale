@@ -19,16 +19,21 @@ $(warning GPS_CHIP_ID != common)
 MTK_PLATFORM := $(subst ",,$(CONFIG_MTK_PLATFORM))
 ifeq ($(CONFIG_MTK_GPS_SUPPORT), y)
 
+ifneq ($(KERNEL_OUT),)
+    ccflags-y += -imacros $(KERNEL_OUT)/include/generated/autoconf.h
+endif
+
 ifndef TOP
     TOP := $(srctree)/..
 endif
-ifeq ($(TARGET_BUILD_VARIANT),$(filter $(TARGET_BUILD_VARIANT),userdebug user))
-    ldflags-y += -s
-endif
+ldflags-y += -s
 
 # Force build fail on modpost warning
 KBUILD_MODPOST_FAIL_ON_WARNINGS := y
 ###############################################################################
+
+# only WMT align this design flow, but gps use this also.
+#ccflags-y += -D MTK_WCN_REMOVE_KERNEL_MODULE
 
 ifeq ($(CONFIG_ARM64), y)
     ccflags-y += -D CONFIG_MTK_WCN_ARM64
@@ -59,13 +64,17 @@ ccflags-y += -I$(srctree)/drivers/devfreq
 ###############################################################################
 
 MODULE_NAME := gps_drv
+ifeq ($(CONFIG_MTK_EXTRA_CONN_DRV_BUILD_IN),y)
 obj-y += $(MODULE_NAME).o
+else
+obj-m += $(MODULE_NAME).o
+endif
 
 GPS_DRV_CONTROL_LNA := n
 GPS_DL_SUPPORT := n
 GPS_DL_HAS_MOCK := n
 GPS_DL_HAS_CONNINFRA_DRV := n
-GPS_SRC_FOLDER := $(TOP)/gps
+GPS_SRC_FOLDER := $(srctree)/drivers/misc/mediatek/connectivity/gps
 
 ifeq ($(CONFIG_ARCH_MTK_PROJECT),"k6833v1_64_swrgo")
 ccflags-y += -DCONFIG_GPSL5_SUPPORT
@@ -125,7 +134,7 @@ ccflags-y += -I$(GPS_SRC_FOLDER)/data_link/plat/$(GPS_DL_PLATFORM)
 ccflags-y += -I$(GPS_SRC_FOLDER)/data_link/plat/$(GPS_DL_PLATFORM)/inc
 ccflags-y += -I$(GPS_SRC_FOLDER)/data_link/plat/$(GPS_DL_PLATFORM)/hw/inc
 ifeq ($(GPS_DL_HAS_CONNINFRA_DRV),y)
-CONNINFRA_SRC_FOLDER := $(TOP)/conninfra
+CONNINFRA_SRC_FOLDER := $(srctree)/drivers/misc/mediatek/connectivity/conninfra
 ccflags-y += -I$(CONNINFRA_SRC_FOLDER)/include
 ccflags-y += -I$(CONNINFRA_SRC_FOLDER)/debug_utility/metlog
 ccflags-y += -DGPS_DL_HAS_CONNINFRA_DRV=1
@@ -199,6 +208,7 @@ ccflags-y += -DGPS_DL_HAS_MOCK=1
 endif
 
 else #Legacy drivers
+WMT_SRC_FOLDER := $(srctree)/drivers/misc/mediatek/connectivity/common
 
 ifeq ($(CONFIG_MTK_COMBO_CHIP),)
 ifneq ($(filter "y",$(CONFIG_MTK_COMBO_CHIP_MT6620) $(CONFIG_MTK_COMBO_CHIP_MT6628) $(CONFIG_MTK_COMBO_CHIP_MT6630) $(CONFIG_MTK_COMBO_CHIP_MT6632) $(CONFIG_MTK_COMBO_CHIP_MT7668)),)
@@ -234,6 +244,9 @@ ccflags-y += -I$(WMT_SRC_FOLDER)/common_main/include
 ccflags-y += -I$(WMT_SRC_FOLDER)/common_main/linux/include
 ccflags-y += -I$(WMT_SRC_FOLDER)/common_main/core/include
 ccflags-y += -I$(WMT_SRC_FOLDER)/common_main/platform/include
+ifneq ($(CONFIG_MTK_CONNSYS_DEDICATED_LOG_PATH),)
+ccflags-y += -I$(WMT_SRC_FOLDER)/debug_utility
+endif
 ifeq ($(GPS_DRV_CONTROL_LNA),y)
 ccflags-y += -I$(GPS_SRC_FOLDER)/gps_stp/lna_ctrl/inc
 ccflags-y += -I$(GPS_SRC_FOLDER)/gps_stp/
@@ -258,6 +271,9 @@ endif
 endif
 ifneq ($(CONFIG_MTK_GPS_EMI),)
 $(MODULE_NAME)-objs += gps_stp/gps_emi.o
+endif
+ifneq ($(CONFIG_MTK_CONNSYS_DEDICATED_LOG_PATH),)
+$(MODULE_NAME)-objs += gps_stp/fw_log_gps.o
 endif
 
 endif

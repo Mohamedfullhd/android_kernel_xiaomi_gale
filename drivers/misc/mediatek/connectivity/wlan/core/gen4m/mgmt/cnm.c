@@ -317,9 +317,6 @@ struct EVENT_LTE_SAFE_CHN g_rLteSafeChInfo;
 
 #endif
 
-#if CFG_SUPPORT_NAN
-uint8_t g_ucNanWmmQueIdx;
-#endif
 /*******************************************************************************
  *                   F U N C T I O N   D E C L A R A T I O N S
  *******************************************************************************
@@ -724,14 +721,6 @@ void cnmChMngrRequestPrivilege(struct ADAPTER
 
 	/* Activate network if it's not activated yet */
 	prBssInfo = GET_BSS_INFO_BY_INDEX(prAdapter, prMsgChReq->ucBssIndex);
-
-	if (!prBssInfo) {
-		log_dbg(CNM, ERROR,
-		       "ChReq: prBssInfo is invalid!\n");
-		cnmMemFree(prAdapter, prCmdBody);
-		cnmMemFree(prAdapter, prMsgHdr);
-		return;
-	}
 
 	if (!IS_BSS_ACTIVE(prBssInfo)) {
 		SET_NET_ACTIVE(prAdapter, prBssInfo->ucBssIndex);
@@ -1343,7 +1332,6 @@ uint8_t cnmIdcCsaReq(IN struct ADAPTER *prAdapter,
 		ucRoleIdx, ucCh, ucBssIdx);
 
 	prBssInfo = prAdapter->aprBssInfo[ucBssIdx];
-	kalMemZero(&rRfChnlInfo, sizeof(rRfChnlInfo));
 
 	if (prBssInfo->ucPrimaryChannel != ucCh) {
 #if (CFG_SUPPORT_WIFI_6G == 1)
@@ -1482,7 +1470,6 @@ SKIP_COOL_DOWN:
 	cnmSetIdcBssIdx(prAdapter, 0);
 	cnmIdcSwitchSapChannel(prAdapter);
 }
-
 
 void cnmIdcSwitchSapChannel(IN struct ADAPTER *prAdapter)
 {
@@ -1716,12 +1703,6 @@ void cnmAisInfraConnectNotify(struct ADAPTER *prAdapter)
 		}
 	}
 #endif
-#if (CFG_SUPPORT_NAN == 1) && (CFG_NAN_SCHEDULER_VERSION == 1)
-	if (nanSchedUpdateNonNanTimelineByAis(prAdapter)
-		== WLAN_STATUS_SUCCESS)
-		nanSchedSyncNonNanChnlToNan(prAdapter);
-#endif
-
 }
 
 /*----------------------------------------------------------------------------*/
@@ -2080,15 +2061,7 @@ uint8_t cnmGetBssMaxBw(struct ADAPTER *prAdapter,
 			}
 
 		}
-#if CFG_SUPPORT_NAN
-	} else if (prBssInfo->eNetworkType == NETWORK_TYPE_NAN) {
-		if (prBssInfo->eBand == BAND_2G4)
-			ucMaxBandwidth = prAdapter->rWifiVar
-					.ucNan2gBandwidth;
-		else if (prBssInfo->eBand == BAND_5G)
-			ucMaxBandwidth = prAdapter->rWifiVar
-					.ucNan5gBandwidth;
-#endif
+
 	}
 
 #if (CFG_SUPPORT_SINGLE_SKU == 1)
@@ -2099,13 +2072,8 @@ uint8_t cnmGetBssMaxBw(struct ADAPTER *prAdapter,
 		ucChannelBw = rlmDomainGetChannelBw(prBssInfo->eBand,
 			prBssInfo->ucPrimaryChannel);
 	}
-
-	if (!prAdapter->rWifiVar.ucForceBw) {
-		if (ucMaxBandwidth > ucChannelBw)
-			ucMaxBandwidth = ucChannelBw;
-	} else {
-		DBGLOG(CNM, WARN, "Force bw\n");
-	}
+	if (ucMaxBandwidth > ucChannelBw)
+		ucMaxBandwidth = ucChannelBw;
 #endif
 	DBGLOG_LIMITED(CNM, TRACE, "pCH=%d, BW=%d\n",
 		prBssInfo->ucPrimaryChannel, ucMaxBandwidth);
@@ -2139,13 +2107,10 @@ struct BSS_INFO *cnmGetBssInfoAndInit(struct ADAPTER *prAdapter,
 				      enum ENUM_NETWORK_TYPE eNetworkType,
 				      u_int8_t fgIsP2pDevice)
 {
-	struct WIFI_VAR *prWifiVar;
 	struct BSS_INFO *prBssInfo;
 	uint8_t i, ucBssIndex, ucOwnMacIdx;
 
 	ASSERT(prAdapter);
-
-	prWifiVar = &prAdapter->rWifiVar;
 
 	/*specific case for p2p device scan*/
 	if (eNetworkType == NETWORK_TYPE_P2P && fgIsP2pDevice) {
@@ -2156,8 +2121,6 @@ struct BSS_INFO *cnmGetBssInfoAndInit(struct ADAPTER *prAdapter,
 		prBssInfo->ucBssIndex = prAdapter->ucP2PDevBssIdx;
 		prBssInfo->eNetworkType = eNetworkType;
 		prBssInfo->ucOwnMacIndex = prAdapter->ucHwBssIdNum;
-		prBssInfo->u4NetifStopTh = prWifiVar->u4NetifStopTh;
-		prBssInfo->u4NetifStartTh = prWifiVar->u4NetifStartTh;
 
 		/* initialize wlan id and status for keys */
 		prBssInfo->ucBMCWlanIndex = WTBL_RESERVED_ENTRY;
@@ -2238,11 +2201,6 @@ struct BSS_INFO *cnmGetBssInfoAndInit(struct ADAPTER *prAdapter,
 			prBssInfo->ucWmmQueSet = DEFAULT_HW_WMM_INDEX;
 			prBssInfo->fgIsWmmInited = FALSE;
 #endif
-			log_dbg(CNM, INFO,
-				"nan, bss=%d,type=%d,omac=%d\n",
-				prBssInfo->ucBssIndex,
-				prBssInfo->eNetworkType,
-				prBssInfo->ucOwnMacIndex);
 			break;
 		}
 	}
@@ -2254,8 +2212,6 @@ struct BSS_INFO *cnmGetBssInfoAndInit(struct ADAPTER *prAdapter,
 		/* initialize wlan id and status for keys */
 		prBssInfo->ucBMCWlanIndex = WTBL_RESERVED_ENTRY;
 		prBssInfo->wepkeyWlanIdx = WTBL_RESERVED_ENTRY;
-		prBssInfo->u4NetifStopTh = prWifiVar->u4NetifStopTh;
-		prBssInfo->u4NetifStartTh = prWifiVar->u4NetifStartTh;
 		for (i = 0; i < MAX_KEY_NUM; i++) {
 			prBssInfo->ucBMCWlanIndexSUsed[i] = FALSE;
 			prBssInfo->ucBMCWlanIndexS[i] = WTBL_RESERVED_ENTRY;
@@ -2296,9 +2252,6 @@ void cnmFreeBssInfo(struct ADAPTER *prAdapter,
 #if CFG_SUPPORT_DFS
 	cnmTimerStopTimer(prAdapter, &prBssInfo->rCsaTimer);
 #endif
-
-	DBGLOG(REQ, INFO,
-		"[NAN] Free Bss %d", prBssInfo->ucBssIndex);
 
 	prBssInfo->fgIsInUse = FALSE;
 }
@@ -2397,7 +2350,7 @@ static u_int8_t cnmDbdcIsAGConcurrent(
 {
 	struct BSS_INFO *prBssInfo;
 	uint8_t ucBssIndex;
-	enum ENUM_BAND eBandCompare = eRfBand_Connecting;
+	uint8_t ucBandCount[BAND_NUM] = {0};
 	u_int8_t fgShouldDbdcEnabled = FALSE;
 	enum ENUM_BAND eBssBand[BSSID_NUM] = {BAND_NULL};
 #if (CFG_SUPPORT_POWER_THROTTLING == 1 && CFG_SUPPORT_CNM_POWER_CTRL == 1)
@@ -2406,6 +2359,10 @@ static u_int8_t cnmDbdcIsAGConcurrent(
 		return FALSE;
 	}
 #endif
+
+	if (eRfBand_Connecting > 0 && eRfBand_Connecting < BAND_NUM)
+		ucBandCount[eRfBand_Connecting]++;
+
 	for (ucBssIndex = 0;
 		ucBssIndex < prAdapter->ucHwBssIdNum; ucBssIndex++) {
 
@@ -2418,29 +2375,34 @@ static u_int8_t cnmDbdcIsAGConcurrent(
 			continue;
 
 		eBssBand[ucBssIndex] = prBssInfo->eBand;
-
-		if (eBandCompare == BAND_NULL)
-			eBandCompare = prBssInfo->eBand;
-
-		if (eBandCompare != prBssInfo->eBand) {
-#if (CFG_SUPPORT_WIFI_6G == 1)
-			if ((eBandCompare == BAND_5G &&
-				prBssInfo->eBand == BAND_6G) ||
-			    (eBandCompare == BAND_6G &&
-				prBssInfo->eBand == BAND_5G))
-				fgShouldDbdcEnabled = FALSE; /* A+A */
-			else
-#endif
-				fgShouldDbdcEnabled = TRUE; /* A+G */
-		}
+		ucBandCount[prBssInfo->eBand]++;
 	}
 
-	log_dbg(CNM, INFO, "[DBDC] BSS AG[%u.%u.%u.%u][%u]\n",
+	/* DBDC decision */
+	if (ucBandCount[BAND_2G4] > 0) {
+		/* 2.4G + 5G / 6G => enable DBDC */
+		/* 2.4G + 5G + 6G => enable DBDC */
+		if (ucBandCount[BAND_5G] > 0
+#if (CFG_SUPPORT_WIFI_6G == 1)
+			|| ucBandCount[BAND_6G] > 0
+#endif
+		   )
+			fgShouldDbdcEnabled = TRUE;
+		else /* 2.4G only */
+			fgShouldDbdcEnabled = FALSE;
+	} else {
+		/* 5G / 6G => disable DBDC */
+		/* 5G + 6G => Do not supportf A+A, disable DBDC, */
+		fgShouldDbdcEnabled = FALSE;
+	}
+
+	log_dbg(CNM, INFO, "[DBDC] BSS AG[%u.%u.%u.%u][%u], DBDC = %u\n",
 	       eBssBand[BSSID_0],
 	       eBssBand[BSSID_1],
 	       eBssBand[BSSID_2],
 	       eBssBand[BSSID_3],
-	       eRfBand_Connecting);
+	       eRfBand_Connecting,
+	       fgShouldDbdcEnabled);
 
 	return fgShouldDbdcEnabled;
 }
@@ -3785,8 +3747,6 @@ enum ENUM_CNM_NETWORK_TYPE_T cnmGetBssNetworkType(
 {
 	if (prBssInfo->eNetworkType == NETWORK_TYPE_AIS)
 		return ENUM_CNM_NETWORK_TYPE_AIS;
-	else if (prBssInfo->eNetworkType == NETWORK_TYPE_NAN)
-		return ENUM_CNM_NETWORK_TYPE_NAN;
 	else if (prBssInfo->eNetworkType == NETWORK_TYPE_P2P) {
 		if (prBssInfo->eCurrentOPMode == OP_MODE_INFRASTRUCTURE)
 			return ENUM_CNM_NETWORK_TYPE_P2P_GC;
@@ -3964,11 +3924,6 @@ uint8_t cnmSapChannelSwitchReq(IN struct ADAPTER *prAdapter,
 error:
 
 	return -1;
-}
-
-uint8_t cnmIncreaseTokenId(struct ADAPTER *prAdapter)
-{
-	return ++prAdapter->ucCnmTokenID;
 }
 
 /*----------------------------------------------------------------------------*/
@@ -4200,6 +4155,50 @@ cnmOpModeReqDispatcher(
 	return eReqFinal;
 }
 
+uint8_t cnmOpModeGetMaxBw(IN struct ADAPTER *prAdapter,
+	IN struct BSS_INFO *prBssInfo)
+{
+	uint8_t ucOpMaxBw = MAX_BW_UNKNOWN;
+	uint8_t ucS1 = 0;
+
+	if (prBssInfo->eCurrentOPMode == OP_MODE_ACCESS_POINT) {
+		ucOpMaxBw = cnmGetBssMaxBw(prAdapter, prBssInfo->ucBssIndex);
+
+		if (ucOpMaxBw >= MAX_BW_80MHZ) {
+			/* Verify if there is valid S1 */
+			ucS1 = nicGetS1(prBssInfo->eBand,
+				prBssInfo->ucPrimaryChannel,
+				rlmMaxBwToVhtBw(ucOpMaxBw));
+
+			/* Try if there is valid S1 for BW80 if we failed to
+			 * get S1 for BW160.
+			 */
+			if (ucS1 == 0 && ucOpMaxBw == MAX_BW_160MHZ) {
+				ucS1 = nicGetS1(prBssInfo->eBand,
+					prBssInfo->ucPrimaryChannel,
+					rlmMaxBwToVhtBw(MAX_BW_80MHZ));
+
+				if (ucS1) /* Fallback to BW80 */
+					ucOpMaxBw = MAX_BW_80MHZ;
+			}
+
+			if (ucS1 == 0) { /* Invalid S1 */
+				DBGLOG(CNM, INFO,
+					"fallback to BW20, BssIdx[%d], CH[%d], MaxBw[%d]\n",
+					prBssInfo->ucBssIndex,
+					prBssInfo->ucPrimaryChannel,
+					ucOpMaxBw);
+
+				ucOpMaxBw = MAX_BW_20MHZ;
+			}
+		}
+	} else { /* STA, GC */
+		ucOpMaxBw = rlmGetBssOpBwByVhtAndHtOpInfo(prBssInfo);
+	}
+
+	return ucOpMaxBw;
+}
+
 /*----------------------------------------------------------------------------*/
 /*!
  * @brief Set the operating TRx Nss.
@@ -4277,8 +4276,8 @@ cnmOpModeSetTRxNss(
 		 * If you want to change OpBw in the future, please
 		 * make sure you can restore to current peer's OpBw.
 		 */
-		ucOpBwFinal = rlmGetBssOpBwByVhtAndHtOpInfo(prBssInfo);
-		if ((eRunReq ==  CNM_OPMODE_REQ_DBDC ||
+		ucOpBwFinal = cnmOpModeGetMaxBw(prAdapter, prBssInfo);
+		if ((eRunReq == CNM_OPMODE_REQ_DBDC ||
 			eRunReq == CNM_OPMODE_REQ_DBDC_SCAN) &&
 			ucOpBwFinal > MAX_BW_80MHZ) {
 			DBGLOG(CNM, INFO,
@@ -4287,6 +4286,24 @@ cnmOpModeSetTRxNss(
 				apucCnmOpModeReq[eRunReq],
 				ucOpBwFinal);
 			ucOpBwFinal = MAX_BW_80MHZ;
+		}
+
+		/* When DBDC is off, we should rollback STA's bandwidth
+		 * as peer's bandwidth capability.
+		 */
+		if (eNewReq == CNM_OPMODE_REQ_DBDC && !fgEnable) {
+			if (prBssInfo->eCurrentOPMode ==
+				OP_MODE_INFRASTRUCTURE) {
+				ucOpBwFinal =
+					rlmGetBssOpBwByOwnAndPeerCapability(
+						prAdapter, prBssInfo);
+				DBGLOG(CNM, INFO,
+					"SetOpMode Bss[%d] %s %s override BW to %d\n",
+					ucBssIndex,
+					apucCnmOpModeReq[eNewReq],
+					fgEnable ? "En" : "Dis",
+					ucOpBwFinal);
+			}
 		}
 
 		if (eNewReq == CNM_OPMODE_REQ_COEX) {
@@ -4336,10 +4353,19 @@ cnmOpModeSetTRxNss(
 			prBssOpCtrl->rRunning.eRunReq = eRunReq;
 			prBssOpCtrl->rRunning.ucOpTxNss = ucOpTxNssFinal;
 			prBssOpCtrl->rRunning.ucOpRxNss = ucOpRxNssFinal;
+#if (CFG_SUPPORT_POWER_THROTTLING == 1 && CFG_SUPPORT_CNM_POWER_CTRL == 1)
+			if (prAdapter->fgANTCtrl)
+				prAdapter->ucANTCtrlPendingCount++;
+#endif
 			break;
 		case OP_CHANGE_STATUS_INVALID:
 		default:
 			eStatus = CNM_OPMODE_REQ_STATUS_INVALID_PARAM;
+#if (CFG_SUPPORT_POWER_THROTTLING == 1 && CFG_SUPPORT_CNM_POWER_CTRL == 1)
+			/* cannot complete ANT control */
+			if (prAdapter->fgANTCtrl)
+				prAdapter->ucANTCtrlPendingCount++;
+#endif
 			break;
 		}
 	}
@@ -4496,15 +4522,12 @@ void cnmOpmodeEventHandler(
 		(prEvent->aucBuffer);
 
 #if (CFG_SUPPORT_POWER_THROTTLING == 1 && CFG_SUPPORT_CNM_POWER_CTRL == 1)
-	/* store reason for ANT_CTRL and SMARTGEAR  */
-	if (prEvtOpMode->ucEnable &&
-			(prEvtOpMode->ucReason ==
-				EVENT_OPMODE_CHANGE_REASON_ANT_CTRL ||
-			prEvtOpMode->ucReason ==
-				EVENT_OPMODE_CHANGE_REASON_SMARTGEAR ||
-			prEvtOpMode->ucReason ==
-				EVENT_OPMODE_CHANGE_REASON_SMARTGEAR_1T2R)) {
+	/* only notify FW for ANT control */
+	if ((prEvtOpMode->ucEnable) &&
+	    (prEvtOpMode->ucReason == EVENT_OPMODE_CHANGE_REASON_ANT_CTRL)) {
+		prAdapter->fgANTCtrl = true;
 		prAdapter->ucANTCtrlReason = prEvtOpMode->ucReason;
+		prAdapter->ucANTCtrlPendingCount = 0;
 	}
 #endif
 
@@ -4541,6 +4564,19 @@ void cnmOpmodeEventHandler(
 			);
 		}
 	}
+
+#if (CFG_SUPPORT_POWER_THROTTLING == 1 && CFG_SUPPORT_CNM_POWER_CTRL == 1)
+	/* notify FW if no active BSS or no pending action frame */
+	if (prAdapter->fgANTCtrl) {
+		DBGLOG(CNM, INFO,
+			"ANT control = Enable: %d, reason: %d, pending count = %d\n",
+			prAdapter->fgANTCtrl, prAdapter->ucANTCtrlReason,
+			prAdapter->ucANTCtrlPendingCount);
+		if (prAdapter->ucANTCtrlPendingCount == 0)
+			rlmSyncAntCtrl(prAdapter,
+				prEvtOpMode->ucOpTxNss, prEvtOpMode->ucOpRxNss);
+	}
+#endif
 }
 
 enum ENUM_CNM_WMM_QUOTA_REQ_T
@@ -4816,7 +4852,7 @@ void cnmPowerControlErrorHandling(
 		p2pFuncDisconnect(prAdapter,
 			prBssInfo,
 			prBssInfo->prStaRecOfAP,
-			FALSE,
+			TRUE,
 			REASON_CODE_OP_MODE_CHANGE_FAIL,
 			TRUE);
 		break;

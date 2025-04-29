@@ -52,7 +52,7 @@ do { \
 #define STP_PSM_PR_WARN(fmt, arg...) \
 do { \
 	if (gPsmDbgLevel >= STP_PSM_LOG_WARN) \
-		pr_info(PFX_PSM "[W]%s: "  fmt, __func__, ##arg); \
+		pr_warn(PFX_PSM "[W]%s: "  fmt, __func__, ##arg); \
 } while (0)
 #define STP_PSM_PR_ERR(fmt, arg...) \
 do { \

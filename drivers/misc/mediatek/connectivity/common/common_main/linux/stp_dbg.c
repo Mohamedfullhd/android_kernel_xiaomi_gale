@@ -1086,21 +1086,21 @@ static _osal_inline_ VOID stp_dbg_dump_data(PUINT8 pBuf, PINT8 title, INT32 len)
 	PUINT8 p_str;
 
 	p_str = &str[0];
-	pr_info(" %s-len:%d\n", title, len);
+	pr_debug(" %s-len:%d\n", title, len);
 	for (idx = 0; idx < len; idx++, pBuf++) {
 		sprintf(p_str, "%02x ", *pBuf);
 		p_str += 3;
 		if (15 == (idx % 16)) {
 			sprintf(p_str, "--end\n");
 			*(p_str + 6) = '\0';
-			pr_info("%s", str);
+			pr_debug("%s", str);
 			p_str = 0;
 		}
 	}
 	if (len % 16) {
 		sprintf(p_str, "--end\n");
 		*(p_str + 6) = '\0';
-		pr_info("%s", str);
+		pr_debug("%s", str);
 	}
 }
 #endif
@@ -1110,19 +1110,19 @@ static VOID stp_dbg_dump_data(PUINT8 pBuf, PINT8 title, INT32 len)
 	char str[240] = {""};
 	char buf_str[32] = {""};
 
-	pr_info(" %s-len:%d\n", title, len);
-	/* pr_info("    ", title, len); */
+	pr_warn(" %s-len:%d\n", title, len);
+	/* pr_warn("    ", title, len); */
 	for (k = 0; k < len; k++) {
 		if (strlen(str) < 200) {
 			if (snprintf(buf_str, sizeof(buf_str), "0x%02x ", pBuf[k]) > 0)
 				strncat(str, buf_str, strlen(buf_str));
 		} else {
-			pr_info("More than 200 of the data is too much\n");
+			pr_warn("More than 200 of the data is too much\n");
 			break;
 		}
 	}
 	strncat(str, "--end\n", strlen("--end\n"));
-	pr_info("%s", str);
+	pr_warn("%s", str);
 }
 
 
@@ -1470,8 +1470,8 @@ static _osal_inline_ INT32 stp_dbg_fill_hdr(STP_DBG_HDR_T *hdr, INT32 type, INT3
 	hdr->dbg_type = dbg_type;
 	hdr->ack = ack;
 	hdr->seq = seq;
-	hdr->sec = (UINT32)now.tv_sec;
-	hdr->usec = (UINT32)(now.tv_nsec / NSEC_PER_USEC);
+	hdr->sec = now.tv_sec;
+	hdr->usec = now.tv_nsec / NSEC_PER_USEC;
 	hdr->crc = crc;
 	hdr->dir = dir;	/* rx */
 	hdr->dmy = 0xffffffff;
@@ -1561,10 +1561,10 @@ INT32 stp_dbg_log_ctrl(UINT32 on)
 {
 	if (on != 0) {
 		gStpDbgLogOut = 1;
-		pr_info("STP-DBG: enable pkt log dump out.\n");
+		pr_warn("STP-DBG: enable pkt log dump out.\n");
 	} else {
 		gStpDbgLogOut = 0;
-		pr_info("STP-DBG: disable pkt log dump out.\n");
+		pr_warn("STP-DBG: disable pkt log dump out.\n");
 	}
 
 	return 0;
@@ -2094,23 +2094,6 @@ INT32 stp_dbg_poll_cpupcr(UINT32 times, UINT32 sleep, UINT32 cmd)
 	return 0;
 }
 
-VOID stp_dbg_clear_cpupcr_reg_info(VOID)
-{
-	if (osal_lock_sleepable_lock(&g_stp_dbg_cpupcr->lock)) {
-		STP_DBG_PR_DBG("lock failed\n");
-		return;
-	}
-
-	g_stp_dbg_cpupcr->count = 0;
-	g_stp_dbg_cpupcr->host_assert_info.reason = 0;
-	g_stp_dbg_cpupcr->host_assert_info.drv_type = 0;
-	g_stp_dbg_cpupcr->issue_type = STP_FW_ISSUE_TYPE_INVALID;
-	g_stp_dbg_cpupcr->keyword[0] = '\0';
-	g_stp_dbg_cpupcr->fwRrq = 0;
-	g_stp_dbg_cpupcr->fwIsr = 0;
-	osal_unlock_sleepable_lock(&g_stp_dbg_cpupcr->lock);
-}
-
 INT32 stp_dbg_set_version_info(UINT32 chipid, PUINT8 pRomVer, PUINT8 pPatchVer, PUINT8 pPatchBrh)
 {
 	if (g_stp_dbg_cpupcr) {
@@ -2155,27 +2138,8 @@ INT32 stp_dbg_set_wifiver(UINT32 wifiver)
 	return 0;
 }
 
-INT32 stp_dbg_get_host_assert_info(PUINT32 drv_type, PUINT32 reason, PUINT32 en)
-{
-	osal_lock_sleepable_lock(&g_stp_dbg_cpupcr->lock);
-	if (drv_type)
-		*drv_type = g_stp_dbg_cpupcr->host_assert_info.drv_type;
-
-	if (reason)
-		*reason = g_stp_dbg_cpupcr->host_assert_info.reason;
-
-	if (en)
-		*en = g_stp_dbg_cpupcr->host_assert_info.assert_from_host;
-	osal_unlock_sleepable_lock(&g_stp_dbg_cpupcr->lock);
-
-	return 0;
-}
-
 INT32 stp_dbg_set_host_assert_info(UINT32 drv_type, UINT32 reason, UINT32 en)
 {
-	/* clear debug info here because here is the first place to set info */
-	stp_dbg_clear_cpupcr_reg_info();
-
 	osal_lock_sleepable_lock(&g_stp_dbg_cpupcr->lock);
 
 	g_stp_dbg_cpupcr->host_assert_info.assert_from_host = en;
@@ -2496,7 +2460,18 @@ INT32 stp_dbg_cpupcr_infor_format(PUINT8 buf, UINT32 max_len)
 			"<extension>NULL</extension>\n\t\t</client>\n\t</hint>\n</main>\n");
 
 	STP_DBG_PR_INFO("buffer len[%d]\n", len);
+	/* STP_DBG_PR_INFO("Format infor:\n%s\n",buf); */
 
+	osal_lock_sleepable_lock(&g_stp_dbg_cpupcr->lock);
+
+	g_stp_dbg_cpupcr->count = 0;
+	g_stp_dbg_cpupcr->host_assert_info.reason = 0;
+	g_stp_dbg_cpupcr->host_assert_info.drv_type = 0;
+	g_stp_dbg_cpupcr->issue_type = STP_FW_ISSUE_TYPE_INVALID;
+	g_stp_dbg_cpupcr->keyword[0] = '\0';
+	g_stp_dbg_cpupcr->fwRrq = 0;
+	g_stp_dbg_cpupcr->fwIsr = 0;
+	osal_unlock_sleepable_lock(&g_stp_dbg_cpupcr->lock);
 
 	return len;
 }
@@ -2664,38 +2639,3 @@ INT32 stp_dbg_nl_send_data(const PINT8 buf, INT32 len)
 	kfree(pdata);
 	return ret;
 }
-
-INT32 stp_dbg_read_memdump_mode(INT32 read_file)
-{
-	static LONG ret = -1;
-	struct file *fd;
-	UINT8 buffer[2];
-	const char filename[] = "/sys/wifi/memdump";
-
-	if (ret >= 0 && read_file == 0)
-		return (INT32)ret;
-
-	fd = filp_open(filename, O_RDONLY, 0);
-
-	if (IS_ERR(fd)) {
-		/* fail to open file, return default value */
-		pr_info("open memdump fail, %ld\n", PTR_ERR(fd));
-		return 2;
-	}
-
-	ret = osal_file_read(fd, buffer, 1, 0);
-	if (ret != 1) {
-		/* fail to read file, return default value */
-		pr_info("read fail, ret = %ld\n", ret);
-		ret = 2;
-	} else {
-		buffer[1] = '\0';
-		osal_strtol(buffer, 10, &ret);
-	}
-	filp_close(fd, NULL);
-
-	STP_DBG_PR_INFO("memdump mode = %ld\n", ret);
-
-	return (INT32)ret;
-}
-

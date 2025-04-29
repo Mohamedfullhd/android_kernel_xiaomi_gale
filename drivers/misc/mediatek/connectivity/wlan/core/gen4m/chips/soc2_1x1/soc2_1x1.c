@@ -134,10 +134,11 @@ void soc2_1x1ConstructFirmwarePrio(struct GLUE_INFO *prGlueInfo,
 		/* Type 1. WIFI_RAM_CODE_soc1_0_1_1.bin */
 		ret = kalSnprintf(*(apucName + (*pucNameIdx)),
 				CFG_FW_NAME_MAX_LEN,
-				"%s_%u%s_1.bin",
+				"%s_%u%s_%u.bin",
 				apucSoc2_1x1FwName[ucIdx],
 				CFG_WIFI_IP_SET,
-				aucFlavor);
+				aucFlavor,
+				1);
 		if (ret >= 0 && ret < CFG_FW_NAME_MAX_LEN)
 			(*pucNameIdx) += 1;
 		else
@@ -148,10 +149,11 @@ void soc2_1x1ConstructFirmwarePrio(struct GLUE_INFO *prGlueInfo,
 		/* Type 2. WIFI_RAM_CODE_soc1_0_1_1 */
 		ret = kalSnprintf(*(apucName + (*pucNameIdx)),
 				CFG_FW_NAME_MAX_LEN,
-				"%s_%u%s_1",
+				"%s_%u%s_%u",
 				apucSoc2_1x1FwName[ucIdx],
 				CFG_WIFI_IP_SET,
-				aucFlavor);
+				aucFlavor,
+				1);
 		if (ret >= 0 && ret < CFG_FW_NAME_MAX_LEN)
 			(*pucNameIdx) += 1;
 		else
@@ -251,7 +253,7 @@ struct BUS_INFO soc2_1x1_bus_info = {
 	.hifRst = NULL,
 	.initPcieInt = NULL,
 	.DmaShdlInit = asicPcieDmaShdlInit,
-	.setPdmaIntMask = asicPdmaIntMaskConfig,
+	.setDmaIntMask = asicPdmaIntMaskConfig,
 #endif /* _HIF_PCIE || _HIF_AXI */
 #if defined(_HIF_USB)
 	.u4UdmaWlCfg_0_Addr = CONNAC_UDMA_WLCFG_0,
@@ -299,6 +301,7 @@ struct ATE_OPS_T soc2_1x1AteOps = {
 	.getICapStatus = connacGetICapStatus,
 	.getICapIQData = connacGetICapIQData,
 	.getRbistDataDumpEvent = nicExtEventICapIQData,
+	.u4Architech = 1,
 };
 #endif
 
@@ -385,6 +388,9 @@ struct mt66xx_chip_info mt66xx_chip_info_soc2_1x1 = {
 	.em_interface_version = MTK_EM_INTERFACE_VERSION,
 
 	.calDebugCmd = soc2_1x1wlanCalDebugCmd,
+#if CFG_SUPPORT_MDDP_AOR
+	.isSupportMddpAOR = true,
+#endif
 };
 
 struct mt66xx_hif_driver_data mt66xx_driver_data_soc2_1x1 = {

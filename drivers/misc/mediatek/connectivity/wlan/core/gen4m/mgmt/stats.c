@@ -29,6 +29,10 @@
 
 #if (CFG_SUPPORT_STATISTICS == 1)
 
+enum EVENT_TYPE {
+	EVENT_RX,
+	EVENT_TX,
+};
 /*******************************************************************************
  *            C O N S T A N T S
  *******************************************************************************
@@ -309,7 +313,6 @@ void statsParseARPInfo(struct sk_buff *skb,
 	switch (eventType) {
 	case EVENT_RX:
 		GLUE_SET_INDEPENDENT_PKT(skb, TRUE);
-		GLUE_SET_PKT_FLAG(skb, ENUM_PKT_ARP);
 		if (u2OpCode == ARP_PRO_REQ)
 			DBGLOG_LIMITED(RX, INFO,
 				"<RX> Arp Req From IP: " IPV4STR "\n",
@@ -334,35 +337,8 @@ void statsParseARPInfo(struct sk_buff *skb,
 	}
 }
 
-static const char *dhcp_msg(uint32_t u4DhcpTypeOpt)
-{
-	uint8_t ucDhcpMessageType;
-	static const char * const dhcp_messages[] = {
-		"DISCOVER",
-		"OFFER",
-		"REQUEST",
-		"DECLINE",
-		"ACK",
-		"NAK",
-		"RELEASE",
-		"INFORM",
-	};
-
-	if (u4DhcpTypeOpt >> 16 != 0x3501) /* Type 53 with 1 byte length */
-		return "";
-
-	ucDhcpMessageType = u4DhcpTypeOpt >> 8 & 0xff;
-
-	if (ucDhcpMessageType >= DHCP_DISCOVER &&
-	    ucDhcpMessageType <= DHCP_INFORM)
-		return dhcp_messages[ucDhcpMessageType - DHCP_DISCOVER];
-
-	return "";
-}
-
 void statsParseUDPInfo(struct sk_buff *skb, uint8_t *pucEthBody,
-		uint8_t eventType, uint16_t u2IpId,
-		struct ADAPTER *prAdapter, uint8_t ucBssIndex)
+		uint8_t eventType, uint16_t u2IpId)
 {
 	/* the number of DHCP packets is seldom so we print log here */
 	uint8_t *pucUdp = &pucEthBody[20];
@@ -372,54 +348,93 @@ void statsParseUDPInfo(struct sk_buff *skb, uint8_t *pucEthBody,
 	uint16_t u2UdpSrcPort;
 	uint32_t u4TransID;
 	uint32_t u4DhcpMagicCode;
-	uint32_t u4DhcpOpt;
-	const char *dhcpmsg;
-	char log[256] = {0};
+	char buf[50] = {0};
 
 	prBootp = (struct BOOTP_PROTOCOL *) &pucUdp[UDP_HDR_LEN];
 	u2UdpDstPort = (pucUdp[2] << 8) | pucUdp[3];
 	u2UdpSrcPort = (pucUdp[0] << 8) | pucUdp[1];
 	if (u2UdpDstPort == UDP_PORT_DHCPS || u2UdpDstPort == UDP_PORT_DHCPC) {
 		WLAN_GET_FIELD_BE32(&prBootp->u4TransId, &u4TransID);
-		WLAN_GET_FIELD_BE32(&prBootp->aucOptions[0], &u4DhcpMagicCode);
-		if (unlikely(u4DhcpMagicCode != DHCP_MAGIC_NUMBER))
-			return;
-
-		WLAN_GET_FIELD_BE32(&prBootp->aucOptions[4], &u4DhcpOpt);
-		dhcpmsg = dhcp_msg(u4DhcpOpt);
-
 		switch (eventType) {
 		case EVENT_RX:
 			GLUE_SET_INDEPENDENT_PKT(skb, TRUE);
-			GLUE_SET_PKT_FLAG(skb, ENUM_PKT_DHCP);
-			DBGLOG_LIMITED(RX, INFO,
-				"<RX> DHCP: Recv %s IPID 0x%04x, MsgType 0x%x, TransID 0x%08x\n",
-				dhcpmsg, u2IpId, prBootp->aucOptions[6],
-				u4TransID);
-			if (kalStrLen(dhcpmsg)) {
-				kalSprintf(log, "[DHCP] %s", dhcpmsg);
-				kalReportWifiLog(prAdapter, ucBssIndex, log);
+
+			WLAN_GET_FIELD_BE32(&prBootp->aucOptions[0],
+					    &u4DhcpMagicCode);
+			if (u4DhcpMagicCode == DHCP_MAGIC_NUMBER) {
+				uint32_t u4Opt;
+
+				WLAN_GET_FIELD_BE32(&prBootp->aucOptions[4],
+						    &u4Opt);
+				switch (u4Opt & 0xffffff00) {
+				case 0x35010100:
+					kalSnprintf(buf, 49, "DISCOVERY");
+					break;
+				case 0x35010200:
+					kalSnprintf(buf, 49, "OFFER");
+					break;
+				case 0x35010300:
+					kalSnprintf(buf, 49, "REQUEST");
+					break;
+				case 0x35010500:
+					kalSnprintf(buf, 49, "ACK");
+					break;
+				case 0x35010600:
+					kalSnprintf(buf, 49, "NAK");
+					break;
+				}
 			}
+			DBGLOG_LIMITED(RX, INFO,
+				"<RX> DHCP: Recv %s IPID 0x%02x, MsgType 0x%x, TransID 0x%04x\n",
+				buf, u2IpId, prBootp->aucOptions[6],
+				u4TransID);
 			break;
 		case EVENT_TX:
+		{
+			uint32_t u4Xid = 0;
+			uint32_t u4Opt = 0;
+
+			WLAN_GET_FIELD_BE32(&prBootp->aucOptions[0],
+					    &u4DhcpMagicCode);
+			if (u4DhcpMagicCode == DHCP_MAGIC_NUMBER) {
+				WLAN_GET_FIELD_BE32(&prBootp->u4TransId,
+						    &u4Xid);
+				WLAN_GET_FIELD_BE32(&prBootp->aucOptions[4],
+						    &u4Opt);
+
+				switch (u4Opt & 0xffffff00) {
+				case 0x35010100:
+					kalSnprintf(buf, 49,
+						"client DISCOVERY");
+					break;
+				case 0x35010200:
+					kalSnprintf(buf, 49, "server OFFER");
+					break;
+				case 0x35010300:
+					kalSnprintf(buf, 49, "client REQUEST");
+					break;
+				case 0x35010500:
+					kalSnprintf(buf, 49, "server ACK");
+					break;
+				case 0x35010600:
+					kalSnprintf(buf, 49, "server NAK");
+					break;
+				}
+			}
+
 			DBGLOG_LIMITED(TX, INFO,
-				"<TX> DHCP %s, XID[0x%08x] OPT[0x%08x] TYPE[%u], SeqNo: %d\n",
-				dhcpmsg, u4TransID, u4DhcpOpt,
-				prBootp->aucOptions[6],
+				"<TP> DHCP %s, XID[0x%08x] OPT[0x%08x] TYPE[%u], SeqNo: %d\n",
+				buf, u4Xid, u4Opt, prBootp->aucOptions[6],
 				GLUE_GET_PKT_SEQ_NO(skb));
-
-			kalSprintf(log, "[DHCP] %s", dhcpmsg);
-			kalBufferWifiLog(prAdapter, ucBssIndex, log,
-				GLUE_GET_PKT_SEQ_NO(skb));
-
+		}
 			break;
 		}
 	} else if (u2UdpSrcPort == UDP_PORT_DNS ||
 			u2UdpDstPort == UDP_PORT_DNS) {
-		uint16_t u2TransId = (pucBootp[0] << 8) | pucBootp[1];
+		uint16_t u2TransId =
+			(pucBootp[0] << 8) | pucBootp[1];
 		if (eventType == EVENT_RX) {
 			GLUE_SET_INDEPENDENT_PKT(skb, TRUE);
-			GLUE_SET_PKT_FLAG(skb, ENUM_PKT_DNS);
 			DBGLOG_LIMITED(RX, INFO,
 				"<RX> DNS: IPID 0x%02x, TransID 0x%04x\n",
 				u2IpId, u2TransId);
@@ -432,8 +447,7 @@ void statsParseUDPInfo(struct sk_buff *skb, uint8_t *pucEthBody,
 }
 
 void statsParseIPV4Info(struct sk_buff *skb,
-		uint8_t *pucEthBody, uint8_t eventType,
-		struct ADAPTER *prAdapter, uint8_t ucBssIndex)
+		uint8_t *pucEthBody, uint8_t eventType)
 {
 	/* IP header without options */
 	uint8_t ucIpProto = pucEthBody[9];
@@ -463,7 +477,6 @@ void statsParseIPV4Info(struct sk_buff *skb,
 		switch (eventType) {
 		case EVENT_RX:
 			GLUE_SET_INDEPENDENT_PKT(skb, TRUE);
-			GLUE_SET_PKT_FLAG(skb, ENUM_PKT_ICMP);
 			DBGLOG_LIMITED(RX, INFO,
 				"<RX> ICMP: Type %d, Id BE 0x%04x, Seq BE 0x%04x\n",
 				ucIcmpType, u2IcmpId, u2IcmpSeq);
@@ -478,8 +491,7 @@ void statsParseIPV4Info(struct sk_buff *skb,
 		break;
 	}
 	case IP_PRO_UDP:
-		statsParseUDPInfo(skb, pucEthBody,
-			eventType, u2IpId, prAdapter, ucBssIndex);
+		statsParseUDPInfo(skb, pucEthBody, eventType, u2IpId);
 	}
 }
 
@@ -491,190 +503,28 @@ void statsLogData(uint8_t eventType, enum WAKE_DATA_TYPE wakeType)
 		wlanLogRxData(wakeType);
 }
 
-static char *eap_type_text(uint8_t type)
-{
-	switch (type) {
-	case EAP_TYPE_IDENTITY: return "Identity";
-	case EAP_TYPE_NOTIFICATION: return "Notification";
-	case EAP_TYPE_NAK: return "Nak";
-	case EAP_TYPE_TLS: return "TLS";
-	case EAP_TYPE_TTLS: return "TTLS";
-	case EAP_TYPE_PEAP: return "PEAP";
-	case EAP_TYPE_SIM: return "SIM";
-	case EAP_TYPE_GTC: return "GTC";
-	case EAP_TYPE_MD5: return "MD5";
-	case EAP_TYPE_OTP: return "OTP";
-	case EAP_TYPE_FAST: return "FAST";
-	case EAP_TYPE_SAKE: return "SAKE";
-	case EAP_TYPE_PSK: return "PSK";
-	default: return "Unknown";
-	}
-}
-
-static int wpa_mic_len(uint32_t akmp)
-{
-	switch (akmp) {
-	case WLAN_AKM_SUITE_8021X_SUITE_B_192:
-		return 24;
-	case WLAN_AKM_SUITE_FILS_SHA256:
-	case WLAN_AKM_SUITE_FILS_SHA384:
-	case WLAN_AKM_SUITE_FT_FILS_SHA256:
-	case WLAN_AKM_SUITE_FT_FILS_SHA384:
-		return 0;
-	default:
-		return 16;
-	}
-}
-
-#if (CFG_SUPPORT_RA_OFLD == 1)
-
-void statsSetRaInfo(struct GLUE_INFO *prGlueInfo,
-	uint8_t *prPayload)
-{
-	struct PARAM_OFLD_INFO rInfo;
-
-	if (prGlueInfo->prAdapter->fgIsInSuspendMode &&
-		prPayload[IPV6_HDR_IP_DST_ADDR_OFFSET] == 0xFF) {
-		DBGLOG(RX, INFO, "Skip RA report.\n");
-		return;
-	}
-
-	kalMemZero(&rInfo, sizeof(struct PARAM_OFLD_INFO));
-	rInfo.ucType = PKT_OFLD_TYPE_RA;
-	rInfo.ucOp = PKT_OFLD_OP_UPDATE;
-
-	rInfo.u4BufLen = 40 + (prPayload[IPV6_HDR_PAYLOAD_LEN_OFFSET] << 8) +
-				prPayload[IPV6_HDR_PAYLOAD_LEN_OFFSET + 1];
-
-	DBGLOG(RX, INFO, "RA size[%d]\n", rInfo.u4BufLen);
-	DBGLOG_MEM8(RX, INFO, prPayload, 40);
-
-	if (rInfo.u4BufLen < PKT_OFLD_BUF_SIZE) {
-		kalMemCopy(&rInfo.aucBuf[0], prPayload, rInfo.u4BufLen);
-		DBGLOG_MEM8(RX, INFO, prPayload, rInfo.u4BufLen);
-	}
-
-	wlanSendSetQueryCmd(prGlueInfo->prAdapter,
-				CMD_ID_PKT_OFLD,
-				TRUE,
-				FALSE,
-				FALSE,
-				NULL,
-				NULL,
-				sizeof(struct CMD_OFLD_INFO),
-				(uint8_t *) &rInfo,
-				NULL, 0);
-
-}
-#endif
-
-static const char *icmpv6_msg(uint8_t ucICMPv6Type)
-{
-	static const char * const icmpv6_messages[] = {
-		"Echo Request",
-		"Echo Reply",
-		"Multicast Listener Query",
-		"Multicast Listener Report",
-		"Multicast Listener Done",
-		"Router Solicitation",
-		"Router Advertisement",
-		"Neighbor Solicitation",
-		"Neighbor Advertisement",
-	};
-
-	if (ucICMPv6Type >= ICMPV6_TYPE_ECHO_REQUEST &&
-	    ucICMPv6Type <= ICMPV6_TYPE_NEIGHBOR_ADVERTISEMENT)
-		return icmpv6_messages[ucICMPv6Type - ICMPV6_TYPE_ECHO_REQUEST];
-
-	return NULL;
-}
-
-static void ipv6_addr_ntop(uint8_t *pucIPv6Addr, char *output, uint32_t bufsize)
-{
-	uint32_t i;
-	int32_t n;
-
-	for (i = 0; i < IPV6_ADDR_LEN; i += 2) {
-		n = kalSnprintf(output, bufsize, "%02x%02x%s",
-				pucIPv6Addr[i], pucIPv6Addr[i+1],
-			 i == IPV6_ADDR_LEN - 2 ? "" : ":");
-		output += n;
-		bufsize -= n;
-	}
-}
-
-static void link_addr_ntop(uint8_t *pucLinkAddr, char *output, uint32_t bufsize)
-{
-	uint32_t i;
-	int32_t n;
-
-	for (i = 0; i < MAC_ADDR_LEN; i++) {
-		n = kalSnprintf(output, bufsize, "%02x%s",
-				pucLinkAddr[i],
-			 i == MAC_ADDR_LEN - 1 ? "" : ":");
-		output += n;
-		bufsize -= n;
-	}
-
-}
-
-/* log NS/NA messages */
-static void get_target_link_addr(struct ADAPTER *prAdapter,
-				 enum EVENT_TYPE dir, uint8_t ucICMPv6Type,
-				 uint8_t *pucTargetAddr, char *pTargetAddr,
-				 uint8_t *pucLinkAddr, char **pLinkAddr)
-{
-
-	ipv6_addr_ntop(pucTargetAddr, pTargetAddr, IPV6_ADDR_LEN / 2 * 5);
-
-	if ((*pucLinkAddr == ICMPV6_OPTION_SOURCE_LINK_ADDR ||
-	     *pucLinkAddr == ICMPV6_OPTION_TARGET_LINK_ADDR) &&
-	    *(pucLinkAddr + 1) == 1)
-		link_addr_ntop(pucLinkAddr + 2, *pLinkAddr, MAC_ADDR_LEN * 3);
-	else
-		*pLinkAddr = "NA";
-
-#if CFG_SUPPORT_NAN
-	nan_log_icmp(prAdapter, dir,
-		     ucICMPv6Type - ICMPV6_TYPE_NEIGHBOR_SOLICITATION,
-		     pTargetAddr);
-#endif
-}
-
 static void statsParsePktInfo(uint8_t *pucPkt, struct sk_buff *skb,
-	uint8_t status, uint8_t eventType,
-	struct ADAPTER *prAdapter, uint8_t ucBssIndex)
+	uint8_t status, uint8_t eventType)
 {
 	/* get ethernet protocol */
 	uint16_t u2EtherType =
 		(pucPkt[ETH_TYPE_LEN_OFFSET] << 8)
 			| (pucPkt[ETH_TYPE_LEN_OFFSET + 1]);
 	uint8_t *pucEthBody = &pucPkt[ETH_HLEN];
-	const char *icmp6msg;
-	uint8_t ucICMPv6Type;
-	uint8_t *pucIcmp6;
-	uint16_t u2IcmpId;
-	uint16_t u2IcmpSeq;
-	char log[256] = {0};
-	/* ICMPv6 NS/NA */
-	uint8_t *pucTargetAddr;
-	uint8_t *pucLinkAddr;
-	char *pTargetAddr = log;
-	char *pLinkAddr = log + IPV6_ADDR_LEN / 2 * 5;
-
 
 	switch (u2EtherType) {
 	case ETH_P_ARP:
+	{
 		statsLogData(eventType, WLAN_WAKE_ARP);
 		statsParseARPInfo(skb, pucEthBody, eventType);
 		break;
-
+	}
 	case ETH_P_IPV4:
+	{
 		statsLogData(eventType, WLAN_WAKE_IPV4);
-		statsParseIPV4Info(skb, pucEthBody,
-			eventType, prAdapter, ucBssIndex);
+		statsParseIPV4Info(skb, pucEthBody, eventType);
 		break;
-
+	}
 	case ETH_P_IPV6:
 	{
 		/* IPv6 header without options */
@@ -689,7 +539,7 @@ static void statsParsePktInfo(uint8_t *pucPkt, struct sk_buff *skb,
 
 		statsLogData(eventType, WLAN_WAKE_IPV6);
 		switch (ucIpv6Proto) {
-		case IP_PRO_TCP:
+		case 0x06:/*tcp*/
 			switch (eventType) {
 			case EVENT_RX:
 				DBGLOG(RX, TRACE, "<RX><IPv6> tcp packet\n");
@@ -700,7 +550,7 @@ static void statsParsePktInfo(uint8_t *pucPkt, struct sk_buff *skb,
 			}
 			break;
 
-		case IP_PRO_UDP:
+		case 0x11:/*UDP*/
 			switch (eventType) {
 			case EVENT_RX:
 			{
@@ -717,16 +567,12 @@ static void statsParsePktInfo(uint8_t *pucPkt, struct sk_buff *skb,
 					DBGLOG(RX, TRACE,
 						"<RX><IPv6> dns packet\n");
 					GLUE_SET_INDEPENDENT_PKT(skb, TRUE);
-					GLUE_SET_PKT_FLAG(skb,
-						ENUM_PKT_DNS);
 					break;
 				case 547:/*dhcp*/
 				case 546:
 					DBGLOG(RX, INFO,
 						"<RX><IPv6> dhcp packet\n");
 					GLUE_SET_INDEPENDENT_PKT(skb, TRUE);
-					GLUE_SET_PKT_FLAG(skb,
-						ENUM_PKT_DHCP);
 					break;
 				case 123:/*ntp port*/
 					DBGLOG(RX, INFO,
@@ -747,15 +593,13 @@ static void statsParsePktInfo(uint8_t *pucPkt, struct sk_buff *skb,
 			}
 			break;
 
-		case IPV6_PROTOCOL_HOP_BY_HOP:
+		case 0x00:/*IPv6  hop-by-hop*/
 			switch (eventType) {
 			case EVENT_RX:
 				/*need chech detai pakcet type*/
 				/*130 mlti listener query*/
 				/*143 multi listener report v2*/
 				GLUE_SET_INDEPENDENT_PKT(skb, TRUE);
-				GLUE_SET_PKT_FLAG(skb,
-					ENUM_PKT_IPV6_HOP_BY_HOP);
 
 				DBGLOG(RX, INFO,
 					"<RX><IPv6> hop-by-hop packet\n");
@@ -767,126 +611,50 @@ static void statsParsePktInfo(uint8_t *pucPkt, struct sk_buff *skb,
 			}
 			break;
 
-		case IP_PRO_ICMPV6:
-			pucIcmp6 = &pucEthBody[IPV6_HDR_LEN];
-			ucICMPv6Type = pucIcmp6[0];
-			icmp6msg = icmpv6_msg(ucICMPv6Type);
-			u2IcmpId = HTONS(*(uint16_t *)
-					 &pucIcmp6[ICMP_IDENTIFIER_OFFSET]);
-			u2IcmpSeq = HTONS(*(uint16_t *)
-					  &pucIcmp6[ICMP_SEQ_NUM_OFFSET]);
-
-			pucTargetAddr = &pucIcmp6[ICMPV6_NS_NA_TARGET_OFFSET];
-			pucLinkAddr = &pucIcmp6[ICMPV6_NS_NA_OPTION_OFFSET];
-
+		case 0x3a:/*ipv6 ICMPV6*/
 			switch (eventType) {
 			case EVENT_RX:
-				/* IPv6 header without options */
-				GLUE_SET_INDEPENDENT_PKT(skb, TRUE);
-				GLUE_SET_PKT_FLAG(skb, ENUM_PKT_ICMPV6);
+			{
+				uint8_t ucICMPv6Type = 0;
 
-				if (unlikely(!icmp6msg)) {
+				/* IPv6 header without options */
+				ucICMPv6Type = pucEthBody[IPV6_HDR_LEN];
+				GLUE_SET_INDEPENDENT_PKT(skb, TRUE);
+
+				switch (ucICMPv6Type) {
+				case 0x85: /*ICMPV6_TYPE_ROUTER_SOLICITATION*/
+					DBGLOG_LIMITED(RX, INFO,
+				"<RX><IPv6> ICMPV6 Router Solicitation\n");
+					break;
+
+				case 0x86: /*ICMPV6_TYPE_ROUTER_ADVERTISEMENT*/
+					DBGLOG_LIMITED(RX, INFO,
+				"<RX><IPv6> ICMPV6 Router Advertisement\n");
+					break;
+
+				case ICMPV6_TYPE_NEIGHBOR_SOLICITATION:
+					DBGLOG_LIMITED(RX, INFO,
+				"<RX><IPv6> ICMPV6 Neighbor Solicitation\n");
+					break;
+
+				case ICMPV6_TYPE_NEIGHBOR_ADVERTISEMENT:
+					DBGLOG_LIMITED(RX, INFO,
+				"<RX><IPv6> ICMPV6 Neighbor Advertisement\n");
+					break;
+				default:
 					DBGLOG_LIMITED(RX, INFO,
 						"<RX><IPv6> ICMPV6 type=%u\n",
 						ucICMPv6Type);
 					break;
 				}
-
-				if (ucICMPv6Type == ICMPV6_TYPE_ECHO_REQUEST ||
-				    ucICMPv6Type == ICMPV6_TYPE_ECHO_REPLY) {
-					DBGLOG_LIMITED(RX, INFO,
-						"<RX><IPv6> ICMPv6: %s, Id BE 0x%04x, Seq BE %u",
-						icmp6msg, u2IcmpId, u2IcmpSeq);
-				} else if (ucICMPv6Type ==
-					   ICMPV6_TYPE_NEIGHBOR_SOLICITATION) {
-					get_target_link_addr(prAdapter,
-							     EVENT_RX,
-							     ucICMPv6Type,
-							     pucTargetAddr,
-							     pTargetAddr,
-							     pucLinkAddr,
-							     &pLinkAddr);
-
-					DBGLOG_LIMITED(RX, INFO,
-						"<RX><IPv6> ICMPv6: %s, who has: %s link: %s",
-						icmp6msg,
-						pTargetAddr, pLinkAddr);
-
-				} else if (ucICMPv6Type ==
-					   ICMPV6_TYPE_NEIGHBOR_ADVERTISEMENT) {
-					get_target_link_addr(prAdapter,
-							     EVENT_RX,
-							     ucICMPv6Type,
-							     pucTargetAddr,
-							     pTargetAddr,
-							     pucLinkAddr,
-							     &pLinkAddr);
-
-					DBGLOG_LIMITED(RX, INFO,
-						"<RX><IPv6> ICMPv6: %s, tgt is: %s link: %s",
-						icmp6msg,
-						pTargetAddr, pLinkAddr);
-				} else {
-					DBGLOG_LIMITED(RX, INFO,
-						"<RX><IPv6> ICMPv6 %s",
-						icmp6msg);
-				}
+			}
 				break;
-
 			case EVENT_TX:
-				if (unlikely(!icmp6msg)) {
-					DBGLOG_LIMITED(TX, INFO,
-						"<TX><IPv6> ICMPV6 type=%u",
-						ucICMPv6Type);
-					break;
-				}
-
-				if (ucICMPv6Type == ICMPV6_TYPE_ECHO_REQUEST ||
-				    ucICMPv6Type == ICMPV6_TYPE_ECHO_REPLY) {
-					DBGLOG_LIMITED(TX, INFO,
-						"<TX><IPv6> ICMPv6: %s, Id 0x%04x, Seq BE %u, SeqNo: %u",
-						icmp6msg, u2IcmpId, u2IcmpSeq,
-						GLUE_GET_PKT_SEQ_NO(skb));
-				} else if (ucICMPv6Type ==
-					 ICMPV6_TYPE_NEIGHBOR_SOLICITATION) {
-					get_target_link_addr(prAdapter,
-							     EVENT_TX,
-							     ucICMPv6Type,
-							     pucTargetAddr,
-							     pTargetAddr,
-							     pucLinkAddr,
-							     &pLinkAddr);
-
-					DBGLOG(TX, INFO,
-						"<TX><IPv6> ICMPv6: %s, who has: %s link: %s, SeqNo: %u",
-						icmp6msg,
-						pTargetAddr, pLinkAddr,
-						GLUE_GET_PKT_SEQ_NO(skb));
-				} else if (ucICMPv6Type ==
-					 ICMPV6_TYPE_NEIGHBOR_ADVERTISEMENT) {
-					get_target_link_addr(prAdapter,
-							     EVENT_TX,
-							     ucICMPv6Type,
-							     pucTargetAddr,
-							     pTargetAddr,
-							     pucLinkAddr,
-							     &pLinkAddr);
-
-					DBGLOG(TX, INFO,
-						"<TX><IPv6> ICMPv6: %s, tgt is: %s link: %s, SeqNo: %u",
-						icmp6msg,
-						pTargetAddr, pLinkAddr,
-						GLUE_GET_PKT_SEQ_NO(skb));
-				} else {
-					DBGLOG_LIMITED(TX, INFO,
-						"<TX><IPv6> ICMPv6 %s, SeqNo: %u",
-						icmp6msg,
-						GLUE_GET_PKT_SEQ_NO(skb));
-				}
+				DBGLOG_LIMITED(TX, INFO,
+					"<TX><IPv6> ICMPV6 packet\n");
 				break;
 			}
 			break;
-
 		default:
 			if (eventType == EVENT_RX)
 				DBGLOG(RX, INFO,
@@ -901,74 +669,22 @@ static void statsParsePktInfo(uint8_t *pucPkt, struct sk_buff *skb,
 		uint8_t *pucEapol = pucEthBody;
 		uint8_t ucEapolType = pucEapol[1];
 		uint16_t u2KeyInfo = 0;
-		uint16_t u2KeyDataLen = 0;
-		uint8_t mic_len = 16;
-		uint8_t key_data_len_offset; /* fixed field len + mic len*/
-		uint8_t isPairwise = 0;
 		uint8_t m = 0;
-		uint16_t u2EapLen = 0;
-		uint8_t ucEapType = pucEapol[8];
-		uint8_t ucEapCode = pucEapol[4];
-		struct CONNECTION_SETTINGS *prConnSettings = NULL;
-
-		uint8_t *apucEapCode[ENUM_EAP_CODE_NUM] = {
-			(uint8_t *) DISP_STRING("UNKNOWN"),
-			(uint8_t *) DISP_STRING("REQ"),
-			(uint8_t *) DISP_STRING("RESP"),
-			(uint8_t *) DISP_STRING("SUCC"),
-			(uint8_t *) DISP_STRING("FAIL")
-		};
-
-		if (eventType == EVENT_RX)
-			GLUE_SET_PKT_FLAG(skb, ENUM_PKT_1X);
 
 		statsLogData(eventType, WLAN_WAKE_1X);
 		switch (ucEapolType) {
 		case 0: /* eap packet */
-			WLAN_GET_FIELD_BE16(&pucEapol[6], &u2EapLen);
 			switch (eventType) {
 			case EVENT_RX:
 				DBGLOG(RX, INFO,
 					"<RX> EAP Packet: code %d, id %d, type %d\n",
 					pucEapol[4], pucEapol[5], pucEapol[7]);
-
-				if (ucEapCode == 1 || ucEapCode == 2) {
-					if (kalStrnCmp(
-						eap_type_text(ucEapType),
-						"Unknown", 7) != 0)
-						kalSprintf(log,
-							"[EAP] %s type=%s len=%d",
-						apucEapCode[ucEapCode],
-						eap_type_text(ucEapType),
-						u2EapLen);
-				} else
-					kalSprintf(log,
-						"[EAP] %s",
-						apucEapCode[ucEapCode]);
-
-				kalReportWifiLog(prAdapter, ucBssIndex, log);
 				break;
 			case EVENT_TX:
 				DBGLOG(TX, INFO,
 				       "<TX> EAP Packet: code %d, id %d, type %d, SeqNo: %d\n",
 				       pucEapol[4], pucEapol[5], pucEapol[7],
 				       GLUE_GET_PKT_SEQ_NO(skb));
-
-				if (ucEapCode == 1 || ucEapCode == 2) {
-					if (kalStrnCmp(
-						eap_type_text(ucEapType),
-						"Unknown", 7) != 0)
-						kalSprintf(log,
-							"[EAP] %s type=%s len=%d",
-						apucEapCode[ucEapCode],
-						eap_type_text(ucEapType),
-						u2EapLen);
-				} else
-						kalSprintf(log,
-							"[EAP] %s",
-							apucEapCode[ucEapCode]);
-				kalBufferWifiLog(prAdapter, ucBssIndex, log,
-					GLUE_GET_PKT_SEQ_NO(skb));
 				break;
 			}
 			break;
@@ -986,114 +702,28 @@ static void statsParsePktInfo(uint8_t *pucPkt, struct sk_buff *skb,
 			}
 			break;
 		case ETH_EAPOL_KEY: /* key */
-			prConnSettings =
-				aisGetConnSettings(prAdapter, ucBssIndex);
-			if (prConnSettings) {
-				mic_len = wpa_mic_len(
-				prConnSettings->rRsnInfo.au4AuthKeyMgtSuite[0]);
-			}
-			WLAN_GET_FIELD_BE16(&pucEapol[
-				ieee802_1x_hdr_size
-				+ wpa_eapol_key_key_info_offset],
-				&u2KeyInfo);
-			key_data_len_offset =
-				ieee802_1x_hdr_size
-				+ wpa_eapol_key_fixed_field_size
-				+ mic_len;
-			WLAN_GET_FIELD_BE16(&pucEapol[key_data_len_offset],
-				&u2KeyDataLen);
-			DBGLOG(AIS, INFO,
-				"akm=%x mic_len=%d key_data_len_offset=%d",
-				prConnSettings->rRsnInfo.au4AuthKeyMgtSuite[0],
-				mic_len, key_data_len_offset);
-
+			WLAN_GET_FIELD_BE16(&pucEapol[5], &u2KeyInfo);
 			switch (eventType) {
 			case EVENT_RX:
-				if (u2KeyInfo & WPA_KEY_INFO_KEY_TYPE) {
-					if (u2KeyInfo
-						& WPA_KEY_INFO_KEY_INDEX_MASK)
-						DBGLOG(RX, WARN,
-							"WPA: ignore EAPOL-key (pairwise) with non-zero key index");
-
-					if (u2KeyInfo &
-						(WPA_KEY_INFO_MIC
-						| WPA_KEY_INFO_ENCR_KEY_DATA)) {
-						m = 3;
-						isPairwise = TRUE;
-					} else {
-						m = 1;
-						isPairwise = TRUE;
-					}
-					DBGLOG(RX, INFO,
-						"<RX> EAPOL: key, M%d, KeyInfo 0x%04x KeyDataLen %d\n",
-						m, u2KeyInfo, u2KeyDataLen);
-				} else {
-					if ((mic_len &&
-							(u2KeyInfo
-						& WPA_KEY_INFO_MIC)) ||
-						(!mic_len &&
-							(u2KeyInfo
-						& WPA_KEY_INFO_ENCR_KEY_DATA)
-						)) {
-						m = 1;
-						isPairwise = FALSE;
-					} else {
-						DBGLOG(RX, WARN,
-							"WPA: EAPOL-Key (Group) without Mic/Encr bit");
-					}
-					DBGLOG(RX, INFO,
-						"<RX> EAPOL: group key, M%d, KeyInfo 0x%04x KeyDataLen %d\n",
-						m, u2KeyInfo, u2KeyDataLen);
-				}
-
-				if (isPairwise)
-					kalSprintf(log,
-						"[EAPOL] 4WAY M%d", m);
+				if ((u2KeyInfo & 0x1100) == 0x0000 ||
+					(u2KeyInfo & 0x0008) == 0x0000)
+					m = 1;
 				else
-					kalSprintf(log,
-						"[EAPOL] GTK M%d", m);
-				kalReportWifiLog(prAdapter, ucBssIndex, log);
-
+					m = 3;
+				DBGLOG(RX, INFO,
+					"<RX> EAPOL: key, M%d, KeyInfo 0x%04x\n",
+					m, u2KeyInfo);
 				break;
 			case EVENT_TX:
-				if (!(u2KeyInfo & WPA_KEY_INFO_KEY_TYPE)) {
+				if ((u2KeyInfo & 0xfff0) == 0x0100)
 					m = 2;
-					isPairwise = FALSE;
-					DBGLOG(RX, INFO,
-						"<TX> EAPOL: group key, M%d, KeyInfo 0x%04x KeyDataLen %d\n",
-						m, u2KeyInfo, u2KeyDataLen);
-				} else if (u2KeyDataLen == 0 ||
-					(mic_len == 0 &&
-					(u2KeyInfo
-					& WPA_KEY_INFO_ENCR_KEY_DATA) &&
-					u2KeyDataLen == AES_BLOCK_SIZE)) {
+				else if ((u2KeyInfo & 0xfff0) == 0x0300)
 					m = 4;
-					isPairwise = TRUE;
-
-					DBGLOG(RX, INFO,
-						"<TX> EAPOL: key, M%d, KeyInfo 0x%04x KeyDataLen %d\n",
-						m, u2KeyInfo, u2KeyDataLen);
-				} else {
-					m = 2;
-					isPairwise = TRUE;
-					DBGLOG(RX, INFO,
-						"<TX> EAPOL: key, M%d, KeyInfo 0x%04x KeyDataLen %d\n",
-						m, u2KeyInfo, u2KeyDataLen);
-				}
-
-				if (isPairwise)
-					kalSprintf(log,
-						"[EAPOL] 4WAY M%d", m);
-				else
-					kalSprintf(log,
-						"[EAPOL] GTK M%d", m);
-				kalBufferWifiLog(prAdapter, ucBssIndex, log,
-					GLUE_GET_PKT_SEQ_NO(skb));
-
+				DBGLOG(TX, INFO,
+				       "<TX> EAPOL: key, M%d, KeyInfo 0x%04x SeqNo: %d\n",
+				       m, u2KeyInfo, GLUE_GET_PKT_SEQ_NO(skb));
 				break;
 			}
-			/* Record EAPOL key type */
-			GLUE_SET_INDEPENDENT_EAPOL(skb, m);
 			break;
 		}
 		break;
@@ -1111,7 +741,6 @@ static void statsParsePktInfo(uint8_t *pucPkt, struct sk_buff *skb,
 			DBGLOG(RX, INFO,
 				"<RX> WAPI: subType %d, Len %d, Seq %d\n",
 				ucSubType, u2Length, u2Seq);
-			GLUE_SET_PKT_FLAG(skb, ENUM_PKT_1X);
 			break;
 		case EVENT_TX:
 			DBGLOG(TX, INFO,
@@ -1131,7 +760,6 @@ static void statsParsePktInfo(uint8_t *pucPkt, struct sk_buff *skb,
 				"<RX> TDLS type %d, category %d, Action %d, Token %d\n",
 				pucEthBody[0], pucEthBody[1],
 				pucEthBody[2], pucEthBody[3]);
-			GLUE_SET_PKT_FLAG(skb, ENUM_PKT_TDLS);
 			break;
 		case EVENT_TX:
 			DBGLOG(TX, INFO,
@@ -1155,8 +783,7 @@ static void statsParsePktInfo(uint8_t *pucPkt, struct sk_buff *skb,
  * \retval None
  */
 /*----------------------------------------------------------------------------*/
-void StatsRxPktInfoDisplay(struct SW_RFB *prSwRfb,
-	struct ADAPTER *prAdapter, uint8_t ucBssIndex)
+void StatsRxPktInfoDisplay(struct SW_RFB *prSwRfb)
 {
 	uint8_t *pPkt = NULL;
 	struct sk_buff *skb = NULL;
@@ -1172,7 +799,7 @@ void StatsRxPktInfoDisplay(struct SW_RFB *prSwRfb,
 	if (!skb)
 		return;
 
-	statsParsePktInfo(pPkt, skb, 0, EVENT_RX, prAdapter, ucBssIndex);
+	statsParsePktInfo(pPkt, skb, 0, EVENT_RX);
 
 	DBGLOG(RX, TEMP, "RxPkt p=%p ipid=%d\n",
 		prSwRfb, GLUE_GET_PKT_IP_ID(skb));
@@ -1189,59 +816,48 @@ void StatsRxPktInfoDisplay(struct SW_RFB *prSwRfb,
  * \retval None
  */
 /*----------------------------------------------------------------------------*/
-void StatsTxPktInfoDisplay(struct sk_buff *prSkb,
-	struct ADAPTER *prAdapter, uint8_t ucBssIndex)
+void StatsTxPktInfoDisplay(struct sk_buff *prSkb)
 {
 	uint8_t *pPkt;
 
 	pPkt = prSkb->data;
-	statsParsePktInfo(pPkt, prSkb, 0, EVENT_TX, prAdapter, ucBssIndex);
-}
-
-uint32_t
-statsGetTlvU2Len(void)
-{
-	return (uint32_t)(sizeof(uint16_t) + sizeof(struct STATS_TRX_TLV_T));
+	statsParsePktInfo(pPkt, prSkb, 0, EVENT_TX);
 }
 
 uint32_t
 statsGetTlvU4Len(void)
 {
-	return (uint32_t)(sizeof(uint32_t) + sizeof(struct STATS_TRX_TLV_T));
+	return sizeof(uint32_t);
 }
 
 uint32_t
 statsGetTlvU8Len(void)
 {
-	return (uint32_t)(sizeof(uint64_t) + sizeof(struct STATS_TRX_TLV_T));
+	return sizeof(uint64_t);
 }
 
 uint32_t
 statsTxGetQueuetLen(void)
 {
-	return (uint32_t)(sizeof(struct STATS_TX_QUEUE_STAT_T) +
-		sizeof(struct STATS_TRX_TLV_T));
+	return sizeof(struct STATS_TX_QUEUE_STAT_T);
 }
 
 uint32_t
 statsTxGetPerBssLen(void)
 {
-	return (uint32_t)(sizeof(struct STATS_TX_PER_BSS_STAT_T) +
-		sizeof(struct STATS_TRX_TLV_T));
+	return sizeof(struct STATS_TX_PER_BSS_STAT_T);
 }
 
 uint32_t
 statsTxGetTimeLen(void)
 {
-	return (uint32_t)(sizeof(struct STATS_TX_TIME_STAT_T) +
-		sizeof(struct STATS_TRX_TLV_T));
+	return sizeof(struct STATS_TX_TIME_STAT_T);
 }
 
 uint32_t
 statsCgsGetAirLatLen(void)
 {
-	return (uint32_t)(sizeof(struct STATS_CGS_LAT_STAT_T) +
-		sizeof(struct STATS_TRX_TLV_T));
+	return sizeof(struct STATS_CGS_LAT_STAT_T);
 }
 
 uint32_t
@@ -1252,7 +868,8 @@ statsTxGetTlvStatTotalLen(void)
 
 	for (u4TlvIdx = 0; u4TlvIdx < STATS_TX_TAG_MAX_NUM; u4TlvIdx++) {
 		if (apfnTxTbl[u4TlvIdx].pfnTlvGetLen)
-			u4TlvLen += apfnTxTbl[u4TlvIdx].pfnTlvGetLen();
+			u4TlvLen += (apfnTxTbl[u4TlvIdx].pfnTlvGetLen() +
+					sizeof(struct STATS_TRX_TLV_T));
 	}
 	DBGLOG(TX, TRACE, "%s=%u\n", __func__, u4TlvLen);
 	return u4TlvLen;
@@ -1266,7 +883,8 @@ statsRxGetTlvStatTotalLen(void)
 
 	for (u4TlvIdx = 0; u4TlvIdx < STATS_RX_TAG_MAX_NUM; u4TlvIdx++) {
 		if (apfnRxTbl[u4TlvIdx].pfnTlvGetLen)
-			u4TlvLen += apfnRxTbl[u4TlvIdx].pfnTlvGetLen();
+			u4TlvLen += (apfnRxTbl[u4TlvIdx].pfnTlvGetLen() +
+					sizeof(struct STATS_TRX_TLV_T));
 	}
 	DBGLOG(RX, TRACE, "%s=%u\n", __func__, u4TlvLen);
 	return u4TlvLen;
@@ -1280,7 +898,8 @@ statsCgsGetTlvStatTotalLen(void)
 
 	for (u4TlvIdx = 0; u4TlvIdx < STATS_CGS_TAG_MAX_NUM; u4TlvIdx++) {
 		if (apfnCgsTbl[u4TlvIdx].pfnTlvGetLen)
-			u4TlvLen += apfnCgsTbl[u4TlvIdx].pfnTlvGetLen();
+			u4TlvLen += (apfnCgsTbl[u4TlvIdx].pfnTlvGetLen() +
+					sizeof(struct STATS_TRX_TLV_T));
 	}
 	DBGLOG(TX, TRACE, "%s=%u\n", __func__, u4TlvLen);
 	return u4TlvLen;
@@ -1288,13 +907,13 @@ statsCgsGetTlvStatTotalLen(void)
 
 void
 statsTxQueueHdlr(struct GLUE_INFO *prGlueInfo,
-	struct STATS_TRX_TLV_T *prTlvList, uint32_t u4TlvLen)
+	void *prTlvBuf, uint32_t u4TlvLen)
 {
 	struct ADAPTER *prAdapter;
 	struct BUS_INFO *prBusInfo;
 	struct PLE_TOP_CR *prCr;
 	struct CMD_ACCESS_REG rCmdAccessReg;
-	struct STATS_TRX_TLV_T *prStatTlv = prTlvList;
+	struct STATS_TRX_TLV_T *prStatTlv = prTlvBuf;
 	struct STATS_TX_QUEUE_STAT_T *prQueueStat;
 	uint32_t u4MsduTokenUsed = 0;
 	uint32_t u4BufLen = 0;
@@ -1326,7 +945,6 @@ statsTxQueueHdlr(struct GLUE_INFO *prGlueInfo,
 
 	prStatTlv->u4Tag = STATS_TX_TAG_QUEUE;
 	prStatTlv->u4Len = u4TlvLen;
-	prTlvList += u4TlvLen;
 	DBGLOG(TX, TRACE, "len=%u Msdu=[%u/%u] PLE Hif=[0x%03x/0x%03x]\n",
 		u4TlvLen, prQueueStat->u4MsduTokenUsed,
 		prQueueStat->u4MsduTokenRsvd,
@@ -1335,11 +953,11 @@ statsTxQueueHdlr(struct GLUE_INFO *prGlueInfo,
 
 void
 statsTxTlvBss0Hdlr(struct GLUE_INFO *prGlueInfo,
-	struct STATS_TRX_TLV_T *prTlvList, uint32_t u4TlvLen)
+	void *prTlvBuf, uint32_t u4TlvLen)
 {
 	struct PARAM_GET_LINK_QUALITY_INFO rParam;
 	struct WIFI_LINK_QUALITY_INFO rLinkQualityInfo;
-	struct STATS_TRX_TLV_T *prStatTlv = prTlvList;
+	struct STATS_TRX_TLV_T *prStatTlv = prTlvBuf;
 	struct STATS_TX_PER_BSS_STAT_T *prBssStat;
 	uint32_t u4BufLen;
 	int32_t i4Status;
@@ -1371,49 +989,43 @@ statsTxTlvBss0Hdlr(struct GLUE_INFO *prGlueInfo,
 	prBssStat->u8AckFail = u8AckFail;
 	prStatTlv->u4Tag = STATS_TX_TAG_BSS0;
 	prStatTlv->u4Len = u4TlvLen;
-	prTlvList += u4TlvLen;
-	DBGLOG(TX, TRACE, "Bss0 len=%u retry=%lu RtsFail=%lu AckFail=%lu\n",
+	DBGLOG(TX, TRACE, "Bss0 len=%u retry=%llu RtsFail=%llu AckFail=%llu\n",
 		u4TlvLen, prBssStat->u8Retry, prBssStat->u8RtsFail,
 		prBssStat->u8AckFail);
 }
 
 void
 statsTxTimeHdlr(struct GLUE_INFO *prGlueInfo,
-	struct STATS_TRX_TLV_T *prTlvList, uint32_t u4TlvLen)
+	void *prTlvBuf, uint32_t u4TlvLen)
 {
-	struct STATS_TRX_TLV_T *prStatTlv = prTlvList;
+	struct STATS_TRX_TLV_T *prStatTlv = prTlvBuf;
 	struct STATS_TX_TIME_STAT_T *prTimeStat;
 #if CFG_SUPPORT_TX_LATENCY_STATS
 	struct ADAPTER *prAdapter = prGlueInfo->prAdapter;
 	struct TX_LATENCY_STATS *stats;
-	uint32_t au4Success[TX_TIME_CAT_NUM];
-	uint32_t au4Fail[TX_TIME_CAT_NUM];
 	uint8_t i;
 #endif
 
 	prTimeStat = (struct STATS_TX_TIME_STAT_T *)(
 		&prStatTlv->aucBuffer[0]);
-	kalMemZero(prTimeStat->au4Success, sizeof(uint32_t) * TX_TIME_CAT_NUM);
-	kalMemZero(prTimeStat->au4Fail, sizeof(uint32_t) * TX_TIME_CAT_NUM);
+	kalMemZero(prTimeStat, sizeof(*prTimeStat));
 
 #if CFG_SUPPORT_TX_LATENCY_STATS
 	stats = &prAdapter->rMsduReportStats.rCounting;
 	for (i = 0; i < TX_TIME_CAT_NUM; i++) {
-		au4Success[i] = GLUE_GET_REF_CNT(stats->au4ConnsysLatency[i]);
-		au4Fail[i] = GLUE_GET_REF_CNT(stats->au4FailConnsysLatency[i]);
+		prTimeStat->au4Success[i] = GLUE_GET_REF_CNT(
+					    stats->au4ConnsysLatency[i]);
+		prTimeStat->au4Fail[i] = GLUE_GET_REF_CNT(
+					    stats->au4FailConnsysLatency[i]);
 	}
-	kalMemCopy(prTimeStat->au4Success, au4Success,
-		sizeof(uint32_t) * TX_TIME_CAT_NUM);
-	kalMemCopy(prTimeStat->au4Fail, au4Fail,
-		sizeof(uint32_t) * TX_TIME_CAT_NUM);
+
 #else
 	DBGLOG(TX, INFO, "tx latency not support.\n");
 #endif
 	prStatTlv->u4Tag = STATS_TX_TAG_TIME;
 	prStatTlv->u4Len = u4TlvLen;
-	prTlvList += u4TlvLen;
 	DBGLOG(TX, TRACE,
-		"Time len=%u success=%u/%u/%u/%u/%u fail=%u/%u/%u/%u/%u\n",
+		"len=%u suc=%u/%u/%u/%u/%u fail=%u/%u/%u/%u/%u\n",
 		u4TlvLen, prTimeStat->au4Success[0], prTimeStat->au4Success[1],
 		prTimeStat->au4Success[2], prTimeStat->au4Success[3],
 		prTimeStat->au4Success[4], prTimeStat->au4Fail[0],
@@ -1423,28 +1035,27 @@ statsTxTimeHdlr(struct GLUE_INFO *prGlueInfo,
 
 void
 statsRxReorderDropHdlr(struct GLUE_INFO *prGlueInfo,
-	struct STATS_TRX_TLV_T *prTlvList, uint32_t u4TlvLen)
+	void *prTlvBuf, uint32_t u4TlvLen)
 {
 	struct ADAPTER *prAdapter = prGlueInfo->prAdapter;
-	struct STATS_TRX_TLV_T *prStatTlv = prTlvList;
+	struct STATS_TRX_TLV_T *prStatTlv = prTlvBuf;
 	uint64_t *pu8RxReorderDrop = (uint64_t *)(&prStatTlv->aucBuffer[0]);
 
 	*pu8RxReorderDrop = RX_GET_CNT(&prAdapter->rRxCtrl,
 		RX_REORDER_BEHIND_DROP_COUNT);
 	prStatTlv->u4Tag = STATS_RX_TAG_REORDER_DROP;
 	prStatTlv->u4Len = u4TlvLen;
-	prTlvList += u4TlvLen;
-	DBGLOG(RX, TRACE, "ReorderDrop len=%u val=%lu\n", u4TlvLen,
+	DBGLOG(RX, TRACE, "ReorderDrop len=%u val=%llu\n", u4TlvLen,
 		*pu8RxReorderDrop);
 }
 
 void
 statsCgsB0IdleSlotHdlr(struct GLUE_INFO *prGlueInfo,
-	struct STATS_TRX_TLV_T *prTlvList, uint32_t u4TlvLen)
+	void *prTlvBuf, uint32_t u4TlvLen)
 {
 	struct ADAPTER *prAdapter = prGlueInfo->prAdapter;
 	struct WIFI_LINK_QUALITY_INFO *prLinkQualityInfo;
-	struct STATS_TRX_TLV_T *prStatTlv = prTlvList;
+	struct STATS_TRX_TLV_T *prStatTlv = prTlvBuf;
 	uint64_t *pu8B0IdleSlot = (uint64_t *)(&prStatTlv->aucBuffer[0]);
 
 	prLinkQualityInfo = &(prAdapter->rLinkQualityInfo);
@@ -1452,16 +1063,14 @@ statsCgsB0IdleSlotHdlr(struct GLUE_INFO *prGlueInfo,
 		*pu8B0IdleSlot = prLinkQualityInfo->u8IdleSlotCount;
 	prStatTlv->u4Tag = STATS_CGS_TAG_B0_IDLE_SLOT;
 	prStatTlv->u4Len = u4TlvLen;
-	prTlvList += u4TlvLen;
-	DBGLOG(TX, TRACE, "B0IdleSlot len=%u val=%lu\n", u4TlvLen,
-		*pu8B0IdleSlot);
+	DBGLOG(TX, TRACE, "len=%u val=%llu\n", u4TlvLen, *pu8B0IdleSlot);
 }
 
 void
 statsCgsAirLatHdlr(struct GLUE_INFO *prGlueInfo,
-	struct STATS_TRX_TLV_T *prTlvList, uint32_t u4TlvLen)
+	void *prTlvBuf, uint32_t u4TlvLen)
 {
-	struct STATS_TRX_TLV_T *prStatTlv = prTlvList;
+	struct STATS_TRX_TLV_T *prStatTlv = prTlvBuf;
 	struct STATS_CGS_LAT_STAT_T *prAirLat;
 #if CFG_SUPPORT_LLS
 	union {
@@ -1474,8 +1083,7 @@ statsCgsAirLatHdlr(struct GLUE_INFO *prGlueInfo,
 #endif
 
 	prAirLat = (struct STATS_CGS_LAT_STAT_T *)(&prStatTlv->aucBuffer[0]);
-	kalMemZero(prAirLat->au4AirLatLvl, sizeof(uint32_t) * AIR_LAT_LVL_NUM);
-	kalMemZero(prAirLat->au4AirLatMpdu, sizeof(uint32_t) * AIR_LAT_CAT_NUM);
+	kalMemZero(prAirLat, sizeof(*prAirLat));
 
 #if CFG_SUPPORT_LLS
 	u4QueryBufLen = sizeof(query);
@@ -1494,10 +1102,10 @@ statsCgsAirLatHdlr(struct GLUE_INFO *prGlueInfo,
 			&u4QueryInfoLen);
 	DBGLOG(REQ, INFO, "kalIoctl=%x, %u bytes",
 				rStatus, u4QueryInfoLen);
-	DBGLOG_HEX(REQ, INFO, &query.latency, u4QueryInfoLen);
+
 	if (rStatus == WLAN_STATUS_SUCCESS &&
 		u4QueryInfoLen == sizeof(struct EVENT_STATS_LLS_TX_LATENCY)) {
-		DBGLOG(REQ, INFO, "query.latency=%u/%u/%u/%u; %u/%u/%u/%u/%u",
+		DBGLOG(REQ, INFO, "query.lat=%u/%u/%u/%u; %u/%u/%u/%u/%u",
 			query.latency.arLatencyLevel[0],
 			query.latency.arLatencyLevel[1],
 			query.latency.arLatencyLevel[2],
@@ -1523,8 +1131,8 @@ statsCgsAirLatHdlr(struct GLUE_INFO *prGlueInfo,
 #endif
 	prStatTlv->u4Tag = STATS_CGS_TAG_AIR_LAT;
 	prStatTlv->u4Len = u4TlvLen;
-	prTlvList += u4TlvLen;
-	DBGLOG(TX, TRACE, "AirLat len=%u lvl=%u/%u/%u/%u cnt=%u/%u/%u/%u/%u\n",
+	DBGLOG(TX, TRACE,
+		"len=%u lvl=%u/%u/%u/%u cnt=%u/%u/%u/%u/%u\n",
 		u4TlvLen, prAirLat->au4AirLatLvl[0], prAirLat->au4AirLatLvl[1],
 		prAirLat->au4AirLatLvl[2], prAirLat->au4AirLatLvl[3],
 		prAirLat->au4AirLatMpdu[0], prAirLat->au4AirLatMpdu[1],
@@ -1534,46 +1142,49 @@ statsCgsAirLatHdlr(struct GLUE_INFO *prGlueInfo,
 
 void
 statsGetTxInfoHdlr(struct GLUE_INFO *prGlueInfo,
-	struct STATS_TRX_TLV_T *paucTxTlvList)
+	void *prTlvBuf)
 {
 	uint32_t u4TlvIdx = 0;
 	uint32_t u4TlvLen = 0;
-	struct STATS_TRX_TLV_T *prTlvList = paucTxTlvList;
+	uint8_t *ptr = prTlvBuf;
 
 	for (u4TlvIdx = 0; u4TlvIdx < STATS_TX_TAG_MAX_NUM; u4TlvIdx++) {
 		u4TlvLen = apfnTxTbl[u4TlvIdx].pfnTlvGetLen();
 		apfnTxTbl[u4TlvIdx].pfnStstsTlvHdl(prGlueInfo,
-			prTlvList, u4TlvLen);
+			ptr, u4TlvLen);
+		ptr += (u4TlvLen + sizeof(struct STATS_TRX_TLV_T));
 	}
 }
 
 void
 statsGetRxInfoHdlr(struct GLUE_INFO *prGlueInfo,
-	struct STATS_TRX_TLV_T *paucRxTlvList)
+	void *prTlvBuf)
 {
 	uint32_t u4TlvIdx = 0;
 	uint32_t u4TlvLen = 0;
-	struct STATS_TRX_TLV_T *prTlvList = paucRxTlvList;
+	uint8_t *ptr = prTlvBuf;
 
 	for (u4TlvIdx = 0; u4TlvIdx < STATS_RX_TAG_MAX_NUM; u4TlvIdx++) {
 		u4TlvLen = apfnRxTbl[u4TlvIdx].pfnTlvGetLen();
 		apfnRxTbl[u4TlvIdx].pfnStstsTlvHdl(prGlueInfo,
-			prTlvList, u4TlvLen);
+			ptr, u4TlvLen);
+		ptr += (u4TlvLen + sizeof(struct STATS_TRX_TLV_T));
 	}
 }
 
 void
 statsGetCgsInfoHdlr(struct GLUE_INFO *prGlueInfo,
-	struct STATS_TRX_TLV_T *paucCgsTlvList)
+	void *prTlvBuf)
 {
 	uint32_t u4TlvIdx = 0;
 	uint32_t u4TlvLen = 0;
-	struct STATS_TRX_TLV_T *prTlvList = paucCgsTlvList;
+	uint8_t *ptr = prTlvBuf;
 
 	for (u4TlvIdx = 0; u4TlvIdx < STATS_CGS_TAG_MAX_NUM; u4TlvIdx++) {
 		u4TlvLen = apfnCgsTbl[u4TlvIdx].pfnTlvGetLen();
 		apfnCgsTbl[u4TlvIdx].pfnStstsTlvHdl(prGlueInfo,
-			prTlvList, u4TlvLen);
+			ptr, u4TlvLen);
+		ptr += (u4TlvLen + sizeof(struct STATS_TRX_TLV_T));
 	}
 }
 

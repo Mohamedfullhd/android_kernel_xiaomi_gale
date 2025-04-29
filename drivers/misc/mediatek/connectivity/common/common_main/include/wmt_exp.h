@@ -40,14 +40,6 @@
 #define DFT_TAG         "[WMT-DFT]"
 #endif
 
-#ifndef CONFIG_MTK_CONNECTIVITY_LOG
-#define WMT_LOUD_FUNC(fmt, arg...)
-#define WMT_INFO_FUNC(fmt, arg...)
-#define WMT_WARN_FUNC(fmt, arg...)
-#define WMT_ERR_FUNC(fmt, arg...)
-#define WMT_DBG_FUNC(fmt, arg...)
-#define WMT_TRC_FUNC(f)
-#else
 #define WMT_LOUD_FUNC(fmt, arg...) \
 do { \
 	if (gWmtDbgLvl >= WMT_LOG_LOUD) \
@@ -78,7 +70,7 @@ do { \
 	if (gWmtDbgLvl >= WMT_LOG_DBG) \
 		osal_warn_print(DFT_TAG "<%s> <%d>\n", __func__, __LINE__); \
 } while (0)
-#endif
+
 #endif
 
 /*******************************************************************************
@@ -440,6 +432,9 @@ extern INT8 mtk_wcn_wmt_co_clock_flag_get(VOID);
 extern INT32 mtk_wcn_wmt_wifi_fem_cfg_report(PVOID pvInfoBuf);
 extern VOID mtk_wcn_wmt_dump_wmtd_backtrace(VOID);
 extern UINT32 mtk_wmt_get_gps_lna_pin_num(VOID);
+/* begin ,prize-lifenfen-20181211, add FM_LNA_EN */
+extern UINT32 mtk_wmt_get_fm_lna_pin_num(VOID);
+/* end ,prize-lifenfen-20181211, add FM_LNA_EN */
 extern VOID mtk_wmt_set_ext_ldo(UINT32 flag);
 extern INT32 mtk_wmt_gps_mcu_ctrl(PUINT8 p_tx_data_buf, UINT32 tx_data_len, PUINT8 p_rx_data_buf,
 				  UINT32 rx_data_buf_len, PUINT32 p_rx_data_len);
@@ -450,9 +445,6 @@ extern MTK_WCN_BOOL mtk_wmt_gps_l5_suspend_ctrl(MTK_WCN_BOOL suspend);
 
 extern INT32 mtk_wcn_wmt_mpu_lock_aquire(VOID);
 extern VOID mtk_wcn_wmt_mpu_lock_release(VOID);
-
-extern INT32 mtk_wcn_get_reset_info(PUINT8 pBuff, INT32 buffLen);
-extern INT32 mtk_wcn_get_host_assert_info(PUINT32 type, PUINT32 reason, PUINT32 en);
 
 /*******************************************************************************
 *                              F U N C T I O N S

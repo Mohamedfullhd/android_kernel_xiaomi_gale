@@ -150,7 +150,8 @@ extern bool fgIsTxPowerDecreased;
 	GLUE_FLAG_NOTIFY_MD_CRASH | \
 	GLUE_FLAG_DRV_INT)
 
-#define GLUE_FLAG_RX_PROCESS (GLUE_FLAG_HALT | GLUE_FLAG_RX_TO_OS)
+#define GLUE_FLAG_RX_PROCESS (GLUE_FLAG_HALT | GLUE_FLAG_RX_TO_OS | \
+	GLUE_FLAG_RX_GRO_TIMEOUT)
 #else
 /* All flags for single thread driver */
 #define GLUE_FLAG_TX_PROCESS  0xFFFFFFFF
@@ -215,6 +216,8 @@ extern bool fgIsTxPowerDecreased;
 #define PERF_MON_TP_CONDITION (125000)
 #define PERF_MON_COEX_TP_THRESHOLD (100)
 
+#define PERF_MON_MCC_TP_THRESHOLD (50)
+
 /* By wifi.cfg first. If it is not set 1s by default; 100ms on more. */
 #define TX_LATENCY_STATS_UPDATE_INTERVAL (0)
 #define TX_LATENCY_STATS_CONTINUOUS_FAIL_THREHOLD (10)
@@ -248,10 +251,8 @@ extern bool fgIsTxPowerDecreased;
 #define TRAFFIC_RHRESHOLD	150
 #endif
 
-#if CFG_SUPPORT_SA_LOG
 #define WIFI_LOG_MSG_MAX	(512)
 #define WIFI_LOG_MSG_BUFFER	(WIFI_LOG_MSG_MAX * 2)
-#endif
 
 #if (CFG_SUPPORT_POWER_THROTTLING == 1)
 #define PWR_LEVEL_STAT_UPDATE_INTERVAL	60	/* sec */
@@ -317,7 +318,6 @@ enum ENUM_SPIN_LOCK_CATEGORY_E {
 	SPIN_LOCK_BSSLIST_CFG,
 #if CFG_SUPPORT_NAN
 	SPIN_LOCK_NAN_NEGO_CRB,
-	SPIN_LOCK_NAN_NDL_FLOW_CTRL,
 #endif
 	SPIN_LOCK_NUM
 };
@@ -536,20 +536,6 @@ struct PWR_LEVEL_HANDLER_ELEMENT {
 	PFN_PWR_LEVEL_HANDLER prPwrLevelHandler;
 };
 
-struct PARAM_CONNECTIVITY_LOG {
-	uint8_t id;
-	uint8_t len;
-	uint8_t msg[0];
-};
-
-struct BUFFERED_LOG_ENTRY {
-	struct LINK_ENTRY rLinkEntry;
-	uint8_t fgBuffered;
-	uint8_t ucSn;
-	uint8_t ucBssIdx;
-	uint8_t aucLog[64];
-};
-
 /*******************************************************************************
  *                            P U B L I C   D A T A
  *******************************************************************************
@@ -572,14 +558,7 @@ struct BUFFERED_LOG_ENTRY {
 #define KAL_TEST_BIT(bitOffset, value)     test_bit(bitOffset, &value)
 #define SUSPEND_FLAG_FOR_WAKEUP_REASON	(0)
 #define SUSPEND_FLAG_CLEAR_WHEN_RESUME	(1)
-#ifdef CFG_PDMA_SLPPRT_MODE_SUPPORT
-#define GLUE_FLAG_WLAN_RESUME	(2)
-#define GLUE_FLAG_WLAN_SUSPEND  (3)
-#endif
 
-#define KAL_WARN_ON WARN_ON
-#define KAL_IS_ERR IS_ERR
-#define KAL_MIN min
 
 /*----------------------------------------------------------------------------*/
 /* Macros of getting current thread id                                        */
@@ -696,51 +675,6 @@ static inline void kalCfg80211ScanDone(struct cfg80211_scan_request *request,
 	cfg80211_scan_done(request, aborted);
 }
 #endif
-
-/**
- * kalCfg80211VendorEventAlloc - abstraction of cfg80211_vendor_event_alloc
- * cfg80211_vendor_event_alloc - allocate vendor-specific event skb
- * @wiphy: the wiphy
- * @event_idx: index of the vendor event in the wiphy's vendor_events
- * @approxlen: an upper bound of the length of the data that will
- *	be put into the skb
- * @gfp: allocation flags
- *
- * This function allocates and pre-fills an skb for an event on the
- * vendor-specific multicast group.
- *
- * When done filling the skb, call cfg80211_vendor_event() with the
- * skb to send the event.
- *
- * Return: An allocated and pre-filled skb. %NULL if any errors happen.
- *
- * Since linux-4.1.0 the 2nd parameter is added struct wireless_dev
- */
-
-#if KERNEL_VERSION(4, 1, 0) <= LINUX_VERSION_CODE
-static inline struct sk_buff *
-kalCfg80211VendorEventAlloc(struct wiphy *wiphy, struct wireless_dev *wdev,
-				 int approxlen, int event_idx, gfp_t gfp)
-{
-	return cfg80211_vendor_event_alloc(wiphy, wdev,
-					approxlen, event_idx, gfp);
-}
-#else
-static inline struct sk_buff *
-kalCfg80211VendorEventAlloc(struct wiphy *wiphy, struct wireless_dev *wdev,
-				 int approxlen, int event_idx, gfp_t gfp)
-{
-	return cfg80211_vendor_event_alloc(wiphy,
-					approxlen, event_idx, gfp);
-}
-#endif
-
-static inline void kalCfg80211VendorEvent(void *pvPacket)
-{
-	struct sk_buff *pkt = (struct sk_buff *)pvPacket;
-
-	return cfg80211_vendor_event(pkt, GFP_KERNEL);
-}
 
 /* Consider on some Android platform, using request_firmware_direct()
  * may cause system failed to load firmware. So we still use
@@ -919,14 +853,6 @@ static inline void kalCfg80211VendorEvent(void *pvPacket)
 })
 #endif
 
-#define kalMemZAlloc(u4Size, eMemType) ({    \
-	void *pvAddr; \
-	pvAddr = kalMemAlloc(u4Size, eMemType); \
-	if (pvAddr) \
-		kalMemSet(pvAddr, 0, u4Size); \
-	pvAddr; \
-})
-
 /*----------------------------------------------------------------------------*/
 /*!
  * \brief Free allocated cache memory
@@ -1068,20 +994,6 @@ int8_t atoi(uint8_t ch);
 #define _kalRequestFirmware request_firmware
 #endif
 
-#if !defined(__GCC4_has_attribute___fallthrough__)
-#define __GCC4_has_attribute___fallthrough__ 0
-#endif
-
-/* clone 'fallthrough' in include/linux/compiler_attributes.h */
-#if __has_attribute(__fallthrough__)
-#define kal_fallthrough __attribute__((__fallthrough__))
-#else
-#define kal_fallthrough do {} while (0)  /* fallthrough */
-#endif
-
-#define kal_max_t(_type, _v1, _v2) max_t(_type, _v1, _v2)
-#define kal_min_t(_type, _v1, _v2) min_t(_type, _v1, _v2)
-
 /*----------------------------------------------------------------------------*/
 /*!
  * \brief Notify OS with SendComplete event of the specific packet.
@@ -1144,31 +1056,22 @@ int8_t atoi(uint8_t ch);
 
 #define kalGetTimeTick()                jiffies_to_msecs(jiffies)
 
-#if CFG_SUPPORT_SA_LOG
-#define kalPrintSALogLimited(fmt, ...)					\
+#if (BUILD_QA_DBG == 1)
+#define kalPrintLogLimited(fmt, ...)					\
 ({									\
 	static DEFINE_RATELIMIT_STATE(_rs,				\
 		DEFAULT_RATELIMIT_INTERVAL, DEFAULT_RATELIMIT_BURST);	\
-	ratelimit_set_flags(&_rs, RATELIMIT_MSG_ON_RELEASE);		\
 									\
 	if (__ratelimit(&_rs))						\
-		kalPrintSALog(fmt, ##__VA_ARGS__);			\
+		kalPrintLog(fmt, ##__VA_ARGS__);			\
 })
-#endif
 
 #define WLAN_TAG                        "[wlan]"
-#if CFG_SUPPORT_SA_LOG
-#define kalPrint(_Fmt...) \
-	(get_wifi_standalone_log_mode() == 1) \
-	? kalPrintSALog(WLAN_TAG _Fmt) \
-	: pr_info(WLAN_TAG _Fmt)
-#define kalPrintLimited(_Fmt...) \
-	(get_wifi_standalone_log_mode() == 1) \
-	? kalPrintSALogLimited(WLAN_TAG _Fmt) \
-	: pr_info_ratelimited(WLAN_TAG _Fmt)
+#define kalPrint               kalPrintLog
+#define kalPrintLimited(_Fmt...) kalPrintLogLimited(WLAN_TAG _Fmt)
 #else
-#define kalPrint(_Fmt...)               pr_info(WLAN_TAG _Fmt)
-#define kalPrintLimited(_Fmt...)        pr_info_ratelimited(WLAN_TAG _Fmt)
+#define kalPrintLimited(fmt, ...)
+#define kalPrint(fmt, ...)
 #endif
 
 #define kalBreakPoint() \
@@ -1264,6 +1167,48 @@ do { \
 /*----------------------------------------------------------------------------*/
 /* Macros of systrace operations for using in Driver Layer                    */
 /*----------------------------------------------------------------------------*/
+#if !CONFIG_WLAN_DRV_BUILD_IN
+
+#define kalTraceBegin(_fmt, ...) \
+	tracing_mark_write("B|%d|" _fmt "\n", current->tgid, ##__VA_ARGS__)
+
+#define kalTraceEnd() \
+	tracing_mark_write("E|%d\n", current->tgid)
+
+#define kalTraceInt(_value, _fmt, ...) \
+	tracing_mark_write("C|%d|" _fmt "|%d\n", \
+		current->tgid, ##__VA_ARGS__, _value)
+
+#define kalTraceCall() \
+	{ kalTraceBegin("%s", __func__); kalTraceEnd(); }
+
+#define kalTraceEvent(_fmt, ...) \
+	{ kalTraceBegin(_fmt, ##__VA_ARGS__); kalTraceEnd(); }
+
+#define __type_is_void(expr) __builtin_types_compatible_p(typeof(expr), void)
+#define __expr_zero(expr) __builtin_choose_expr(__type_is_void(expr), 0, (expr))
+
+#define TRACE(_expr, _fmt, ...) \
+	__builtin_choose_expr(__type_is_void(_expr), \
+	__TRACE_VOID(_expr, _fmt, ##__VA_ARGS__), \
+	__TRACE(__expr_zero(_expr), _fmt, ##__VA_ARGS__))
+
+#define __TRACE(_expr, _fmt, ...) \
+	({ \
+		typeof(_expr) __ret; \
+		kalTraceBegin(_fmt, ##__VA_ARGS__); \
+		__ret = (_expr); \
+		kalTraceEnd(); \
+		__ret; \
+	})
+
+#define __TRACE_VOID(_expr, _fmt, ...) \
+	({ \
+		kalTraceBegin(_fmt, ##__VA_ARGS__); \
+		(void) (_expr); \
+		kalTraceEnd(); \
+	})
+#else
 
 #define kalTraceBegin(_fmt, ...)
 #define kalTraceEnd()
@@ -1271,6 +1216,8 @@ do { \
 #define kalTraceCall()
 #define kalTraceEvent(_fmt, ...)
 #define TRACE(_expr, _fmt, ...) _expr
+
+#endif
 
 /*----------------------------------------------------------------------------*/
 /* Macros of wiphy operations for using in Driver Layer                       */
@@ -1323,8 +1270,7 @@ uint32_t
 kalProcessRxPacket(IN struct GLUE_INFO *prGlueInfo,
 		   IN void *pvPacket,
 		   IN uint8_t *pucPacketStart, IN uint32_t u4PacketLen,
-		   /* IN PBOOLEAN           pfgIsRetain, */
-		   IN u_int8_t fgIsRetain, IN enum ENUM_CSUM_RESULT aeCSUM[]);
+		   IN enum ENUM_CSUM_RESULT aeCSUM[]);
 
 uint32_t kalRxIndicatePkts(IN struct GLUE_INFO *prGlueInfo,
 			   IN void *apvPkts[],
@@ -1334,12 +1280,12 @@ uint32_t kalRxIndicateOnePkt(IN struct GLUE_INFO
 			     *prGlueInfo, IN void *pvPkt);
 
 #if CFG_SUPPORT_NAN
-int kalIndicateNetlink2User(struct GLUE_INFO *prGlueInfo, void *pvBuf,
-			    uint32_t u4BufLen);
-void kalCreateUserSock(struct GLUE_INFO *prGlueInfo);
-void kalReleaseUserSock(struct GLUE_INFO *prGlueInfo);
-void kalNanIndicateStatusAndComplete(struct GLUE_INFO *prGlueInfo,
-				     uint32_t eStatus, uint8_t ucRoleIdx);
+int kalIndicateNetlink2User(IN struct GLUE_INFO *prGlueInfo, IN void *pvBuf,
+			    IN uint32_t u4BufLen);
+void kalCreateUserSock(IN struct GLUE_INFO *prGlueInfo);
+void kalReleaseUserSock(IN struct GLUE_INFO *prGlueInfo);
+void kalNanIndicateStatusAndComplete(IN struct GLUE_INFO *prGlueInfo,
+				     IN uint32_t eStatus, IN uint8_t ucRoleIdx);
 #endif
 
 void
@@ -1354,14 +1300,6 @@ kalUpdateReAssocReqInfo(IN struct GLUE_INFO *prGlueInfo,
 			IN uint8_t *pucFrameBody, IN uint32_t u4FrameBodyLen,
 			IN u_int8_t fgReassocRequest,
 			IN uint8_t ucBssIndex);
-
-#if CFG_SUPPORT_ASSURANCE
-void kalUpdateDeauthInfo(IN struct GLUE_INFO
-			 *prGlueInfo,
-			 IN uint8_t *pucFrameBody,
-			 IN uint32_t u4FrameBodyLen,
-			 IN uint8_t ucBssIndex);
-#endif
 
 void kalUpdateReAssocRspInfo(IN struct GLUE_INFO
 			     *prGlueInfo,
@@ -1647,7 +1585,8 @@ uint32_t kalGetTxPendingFrameCount(IN struct GLUE_INFO
 uint32_t kalGetTxPendingCmdCount(IN struct GLUE_INFO
 				 *prGlueInfo);
 
-void kalClearCommandQueue(IN struct GLUE_INFO *prGlueInfo);
+void kalClearCommandQueue(IN struct GLUE_INFO *prGlueInfo,
+	IN u_int8_t fgIsNeedHandler);
 
 u_int8_t kalSetTimer(IN struct GLUE_INFO *prGlueInfo,
 		     IN uint32_t u4Interval);
@@ -1901,6 +1840,10 @@ int32_t kalCheckTputLoad(IN struct ADAPTER *prAdapter,
 			 IN int32_t i4Pending,
 			 IN uint32_t u4Used);
 uint32_t kalGetCpuBoostThreshold(void);
+#if CFG_SUPPORT_LITTLE_CPU_BOOST
+uint32_t kalGetLittleCpuBoostThreshold(void);
+#endif /* CFG_SUPPORT_LITTLE_CPU_BOOST */
+int32_t kalCheckVcoreBoost(IN struct ADAPTER *prAdapter, IN uint8_t uBssIndex);
 uint32_t kalGetEmiMetOffset(void);
 void kalSetEmiMetOffset(uint32_t newEmiMetOffset);
 void kalSetRpsMap(IN struct GLUE_INFO *glue, IN unsigned long value);
@@ -1917,8 +1860,8 @@ int32_t kalGetFwFlavor(uint8_t *flavor);
 int32_t kalGetFwFlavorByPlat(uint8_t *flavor);
 int32_t kalGetConnsysVerId(void);
 int32_t kalPerMonSetForceEnableFlag(uint8_t uFlag);
-int32_t kalFbNotifierReg(IN struct GLUE_INFO *prGlueInfo);
-void kalFbNotifierUnReg(void);
+int32_t kalNotifierReg(IN struct GLUE_INFO *prGlueInfo);
+void kalNotifierUnReg(void);
 
 #if KERNEL_VERSION(3, 0, 0) <= LINUX_VERSION_CODE
 /* since: 0b5c9db1b11d3175bb42b80663a9f072f801edf5 */
@@ -1963,6 +1906,14 @@ kalChannelFormatSwitch(IN struct cfg80211_chan_def *channel_def,
 		IN struct RF_CHANNEL_INFO *prRfChnlInfo);
 
 #if CFG_SUPPORT_RX_GRO
+void kalSetGROEvent2Rx(struct GLUE_INFO *pr);
+#if KERNEL_VERSION(4, 15, 0) <= CFG80211_VERSION_CODE
+void kalGROTimerFunc(struct timer_list *timer);
+#else
+void kalGROTimerFunc(unsigned long data);
+#endif
+void kalGROTimerInit(struct ADAPTER *prAdapter);
+void kalGROTimerUninit(struct ADAPTER *prAdapter);
 uint32_t kal_is_skb_gro(struct ADAPTER *prAdapter, uint8_t ucBssIdx);
 void kal_gro_flush(struct ADAPTER *prAdapter, struct net_device *prDev);
 #endif
@@ -1984,8 +1935,7 @@ void kalBatNotifierUnReg(void);
 #endif
 
 #if CFG_SUPPORT_NAN
-void kalNanHandleVendorEvent(struct ADAPTER *prAdapter, uint8_t *prBuffer);
-void kalNanHandlePendingCmd(IN struct ADAPTER *prAdapter, uint8_t *prBuffer);
+void kalNanHandleVendorEvent(IN struct ADAPTER *prAdapter, uint8_t *prBuffer);
 #endif
 
 int kalWlanUeventInit(void);
@@ -1996,9 +1946,16 @@ int _kalSnprintf(char *buf, size_t size, const char *fmt, ...);
 int _kalSprintf(char *buf, const char *fmt, ...);
 
 /* systrace utilities */
+#if !CONFIG_WLAN_DRV_BUILD_IN
+void tracing_mark_write(const char *fmt, ...);
+#endif
 
 uint32_t kalSetSuspendFlagToEMI(IN struct ADAPTER
 	*prAdapter, IN u_int8_t fgSuspend);
+
+#ifdef CONFIG_MTK_CONNSYS_DEDICATED_LOG_PATH
+extern uint32_t getFWLogOnOff(void);
+#endif
 
 void setTimeParameter(
 	struct PARAM_CUSTOM_CHIP_CONFIG_STRUCT *prChipConfigInfo,
@@ -2010,8 +1967,9 @@ void kalSyncTimeToFWByIoctl(void);
 void kalUpdateCompHdlrRec(IN struct ADAPTER *prAdapter,
 	IN PFN_OID_HANDLER_FUNC pfnOidHandler, IN struct CMD_INFO *prCmdInfo);
 
-#if CFG_SUPPORT_SA_LOG
-void kalPrintSALog(const char *fmt, ...);
+extern uint32_t get_wifi_standalone_log_mode(void);
+#if (BUILD_QA_DBG == 1)
+void kalPrintLog(const char *fmt, ...);
 #endif
 
 #if (CFG_SUPPORT_POWER_THROTTLING == 1)
@@ -2025,14 +1983,5 @@ void connsysPowerTempUpdate(enum conn_pwr_msg_type status,
 uint32_t kalDumpPwrLevel(IN struct ADAPTER *prAdapter);
 #endif
 
-void kalReportWifiLog(struct ADAPTER *prAdapter,
-	uint8_t ucBssIndex, uint8_t *log);
-void kalBufferWifiLog(struct ADAPTER *prAdapter, uint8_t ucBssIndex,
-				uint8_t *log, uint8_t ucSn);
-struct BUFFERED_LOG_ENTRY *kalGetBufferLog(struct ADAPTER *prAdapter,
-	uint8_t ucBssIndex, uint8_t ucSn);
-void kalRemoveBufferLog(struct ADAPTER *prAdapter,
-	struct BUFFERED_LOG_ENTRY *entry);
-void kalClearBufferLog(struct ADAPTER *prAdapter);
 #endif /* _GL_KAL_H */
 

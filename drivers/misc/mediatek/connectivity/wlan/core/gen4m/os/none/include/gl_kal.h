@@ -454,6 +454,7 @@ enum ENUM_CMD_TX_RESULT {
 #define SUSPEND_FLAG_FOR_WAKEUP_REASON	(0)
 #define SUSPEND_FLAG_CLEAR_WHEN_RESUME	(1)
 
+
 /*----------------------------------------------------------------------------*/
 /* Macros of getting current thread id                                        */
 /*----------------------------------------------------------------------------*/
@@ -610,14 +611,6 @@ enum ENUM_CMD_TX_RESULT {
 })
 #endif
 
-#define kalMemZAlloc(u4Size, eMemType) ({    \
-	void *pvAddr; \
-	pvAddr = kalMemAlloc(u4Size, eMemType); \
-	if (pvAddr) \
-		kalMemSet(pvAddr, 0, u4Size); \
-	pvAddr; \
-})
-
 /*----------------------------------------------------------------------------*/
 /*!
  * \brief Free allocated cache memory
@@ -738,18 +731,6 @@ int8_t kal_atoi(uint8_t ch);
 #else
 #define kalDevSetPowerState(prGlueInfo, ePowerMode)
 #endif
-
-#if __has_attribute(__fallthrough__)
-#define kal_fallthrough __attribute__((__fallthrough__))
-#else
-#define kal_fallthrough do {} while (0)  /* fallthrough */
-#endif
-
-#define kal_min_t(_type, _v1, _v2) \
-	KAL_NEED_IMPLEMENT(__FILE__, __func__, __LINE__)
-
-#define kal_tasklet_schedule(_rTasklet) \
-	KAL_NEED_IMPLEMENT(__FILE__, __func__, __LINE__)
 
 /*----------------------------------------------------------------------------*/
 /*!
@@ -980,15 +961,14 @@ u_int8_t kalSetTimer(IN struct GLUE_INFO *prGlueInfo,
 
 #ifdef CFG_REMIND_IMPLEMENT
 #define kalProcessRxPacket(_prGlueInfo, _pvPacket, _pucPacketStart, \
-	_u4PacketLen, _fgIsRetain, _aeCSUM) \
+	_u4PacketLen, _aeCSUM) \
 	KAL_NEED_IMPLEMENT(__FILE__, __func__, __LINE__, _prGlueInfo)
 #else
 uint32_t
 kalProcessRxPacket(IN struct GLUE_INFO *prGlueInfo,
 		   IN void *pvPacket,
 		   IN uint8_t *pucPacketStart, IN uint32_t u4PacketLen,
-		   /* IN PBOOLEAN           pfgIsRetain, */
-		   IN u_int8_t fgIsRetain, IN enum ENUM_CSUM_RESULT aeCSUM[]);
+		   IN enum ENUM_CSUM_RESULT aeCSUM[]);
 #endif
 
 uint32_t kalRxIndicatePkts(IN struct GLUE_INFO *prGlueInfo,
@@ -1853,8 +1833,8 @@ void kalSetDrvEmiMpuProtection(phys_addr_t emiPhyBase, uint32_t offset,
 int32_t kalSetCpuNumFreq(uint32_t u4CoreNum,
 			 uint32_t u4Freq);
 int32_t kalPerMonSetForceEnableFlag(uint8_t uFlag);
-int32_t kalFbNotifierReg(IN struct GLUE_INFO *prGlueInfo);
-void kalFbNotifierUnReg(void);
+int32_t kalNotifierReg(IN struct GLUE_INFO *prGlueInfo);
+void kalNotifierUnReg(void);
 
 #ifdef CFG_REMIND_IMPLEMENT
 #define kalInitDevWakeup(_prAdapter, _prDev) \

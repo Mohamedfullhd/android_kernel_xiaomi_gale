@@ -132,7 +132,7 @@ static _osal_inline_ INT32 stp_dbg_combo_put_dump_to_nl(VOID)
 					tmp[index + pkt->hdr.len] = '\n';
 					tmp[index + pkt->hdr.len + 1] = '\0';
 
-					/* pr_info("\n%s\n+++\n", tmp); */
+					/* pr_warn("\n%s\n+++\n", tmp); */
 					ret = stp_dbg_dump_send_retry_handler((PINT8)&tmp, len);
 					if (ret)
 						break;

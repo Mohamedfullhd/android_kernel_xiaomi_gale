@@ -320,6 +320,14 @@ enum ENUM_NET_REG_STATE {
 	ENUM_NET_REG_STATE_UNREGISTERING,
 	ENUM_NET_REG_STATE_NUM
 };
+
+enum ENUM_P2P_REG_STATE {
+	ENUM_P2P_REG_STATE_UNREGISTERED,
+	ENUM_P2P_REG_STATE_REGISTERING,
+	ENUM_P2P_REG_STATE_REGISTERED,
+	ENUM_P2P_REG_STATE_UNREGISTERING,
+	ENUM_P2P_REG_STATE_NUM
+};
 #endif
 
 enum ENUM_PKT_FLAG {
@@ -862,7 +870,10 @@ struct NL80211_DRIVER_STRING_CMD_PARAMS {
 	struct NL80211_DRIVER_TEST_MODE_PARAMS hdr;
 	uint32_t reply_buf_size;
 	uint32_t reply_len;
-	uint8_t *reply_buf;
+	union _reply_buf {
+		uint8_t *ptr;
+		uint64_t data;
+	} reply_buf;
 };
 
 /*SW CMD */
