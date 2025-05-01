@@ -233,4 +233,3 @@ CPU_BE(	orr	syndrome, diff, has_nul )
 	sub	result, data1, data2, lsr #56
 	ret
 ENDPIPROC(strcmp)
-EXPORT_SYMBOL_NOKASAN(strcmp)

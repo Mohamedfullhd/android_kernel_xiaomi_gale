@@ -124,4 +124,3 @@ CPU_LE( lsr	tmp2, tmp2, tmp1 )	/* Shift (tmp1 & 63).  */
 	csel	data2, data2, data2a, le
 	b	.Lrealigned
 ENDPIPROC(strlen)
-EXPORT_SYMBOL_NOKASAN(strlen)

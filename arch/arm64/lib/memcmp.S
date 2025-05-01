@@ -129,4 +129,3 @@ WEAK(memcmp)
 	sub	result, data1w, data2w
 	ret
 ENDPIPROC(memcmp)
-EXPORT_SYMBOL_NOKASAN(memcmp)
