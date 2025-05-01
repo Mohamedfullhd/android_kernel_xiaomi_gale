@@ -1804,6 +1804,7 @@ static ssize_t cpuset_write_resmask_wrapper(struct kernfs_open_file *of,
 		{ "restricted",		CONFIG_CPUSET_RESTRICTED },
 		{ "system-background",	CONFIG_CPUSET_SYSTEM_BG },
 		{ "top-app",		CONFIG_CPUSET_TOP_APP },
+		{ "ui",		        "0-7" },
 	};
 
 	struct cpuset *cs = css_cs(of_css(of));
