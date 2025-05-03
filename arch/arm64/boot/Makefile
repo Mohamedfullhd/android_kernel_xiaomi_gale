@@ -36,6 +36,9 @@ $(obj)/Image.lzma: $(obj)/Image FORCE
 $(obj)/Image.lzo: $(obj)/Image FORCE
 	$(call if_changed,lzo)
 
+$(obj)/dtbo.img: $(DTBO_OBJS) FORCE
+ 	$(call if_changed,mkdtimg,4096) # align dtbo.img to 4kB
+
 install:
 	$(CONFIG_SHELL) $(srctree)/$(src)/install.sh $(KERNELRELEASE) \
 	$(obj)/Image System.map "$(INSTALL_PATH)"
