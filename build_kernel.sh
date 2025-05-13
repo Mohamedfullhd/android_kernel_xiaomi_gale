@@ -49,7 +49,7 @@ elif [ "$COMPILER" = "aosp" ]; then
 fi
 
 # Get AnyKernel3
-git clone https://github.com/Mohamedfullhd/AnyKernel3.git --depth=1 -b haydn
+git clone https://github.com/Mohamedfullhd/AnyKernel3.git --depth=1
 
 # Export Vars
 KBUILD_BUILD_HOST="LR"
