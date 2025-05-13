@@ -8,7 +8,7 @@ set -e
 
 KERNEL_DIR="$(pwd)"
 CHAT_ID="7898438749"
-TOKEN="7818959813:AAFTxeUR5UiFKhzyeh3maHnXHxggwb7cCxs"
+TOKEN="8188281304:AAGd1EB1FqT4NQjOgS7p4IfPyjYRXjHvIMw"
 DEVICE="gale"
 KERVER=$(make kernelversion)
 VERSION=v1
@@ -81,7 +81,7 @@ function zipping() {
         telegram_push "error.log" "**Build Failed:** Kernel compilation threw errors"
         exit 1
     else
-        mv "$IMAGE" AnyKernel3
+        cp "$IMAGE" AnyKernel3
         cd AnyKernel3 || exit 1
         zip -r9 "${FINAL_ZIP}" * -x .git README.md
         cd "$KERNEL_DIR" || exit 1
