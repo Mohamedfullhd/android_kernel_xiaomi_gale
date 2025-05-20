@@ -24,6 +24,7 @@ VIDEOX_TOP += $(srctree)/drivers/misc/mediatek/video/$(MTK_PLATFORM)/videox
 obj-y += fpsgo_main.o
 obj-y += base/
 obj-y += composer/
+obj-y += fpsgo_cus/
 
 obj-y += fbt/
 obj-y += fstb/
