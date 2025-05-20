@@ -201,3 +201,4 @@ obj-$(CONFIG_MTK_GATE_IC) += gate_ic/
 obj-$(CONFIG_MTK_FREQ_HOPPING) += freqhopping/
 obj-$(CONFIG_MTK_TASK_TURBO) += task_turbo/
 obj-y += simtray/
+obj-y += met_drv_v3/
