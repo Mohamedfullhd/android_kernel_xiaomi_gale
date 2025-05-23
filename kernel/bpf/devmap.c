@@ -527,6 +527,14 @@ static void dev_map_flush_old(struct bpf_dtab_netdev *dev)
 	}
 }
 
+static void *dev_map_hash_lookup_elem(struct bpf_map *map, void *key)
+{
+    struct bpf_dtab_netdev *obj = __dev_map_hash_lookup_elem(map, *(u32 *)key);
+    struct net_device *dev = obj ? obj->dev : NULL;
+
+    return dev ? &dev->ifindex : NULL;
+}
+
 static void __dev_map_entry_free(struct rcu_head *rcu)
 {
 	struct bpf_dtab_netdev *dev;
