@@ -5854,7 +5854,7 @@ out_unlock:
 	return retval;
 }
 
-static bool task_is_unity_game(struct task_struct *p)Add commentMore actions
+static bool task_is_unity_game(struct task_struct *p)
 {
 	struct task_struct *t;
 	bool ret = false;
