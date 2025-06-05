@@ -3,3 +3,5 @@
 *.patch
 *.rej
 *.orig
+.orig
+.rej
