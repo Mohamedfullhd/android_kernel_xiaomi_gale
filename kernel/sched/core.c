@@ -3218,7 +3218,6 @@ static void __sched_fork(unsigned long clone_flags, struct task_struct *p)
 	p->se.nr_migrations		= 0;
 	p->se.vruntime			= 0;
 	p->last_sleep_ts		= 0;
-	p->low_latency			= 0;
 #ifdef CONFIG_SCHED_BORE
 	sched_fork_bore(p);
 #endif // CONFIG_SCHED_BORE

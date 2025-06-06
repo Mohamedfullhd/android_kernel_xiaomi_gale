@@ -41,8 +41,6 @@
  * (default: 6ms * (1 + ilog(ncpus)), units: nanoseconds)
  * (BORE default: 24ms constant, units: nanoseconds)
  */
-unsigned int sysctl_sched_latency			= 10000000ULL;
-unsigned int normalized_sysctl_sched_latency		= 10000000ULL;
 #ifdef CONFIG_SCHED_BORE
 unsigned int sysctl_sched_latency			= 24000000ULL;
 static unsigned int normalized_sysctl_sched_latency	= 24000000ULL;
@@ -85,8 +83,6 @@ enum sched_tunable_scaling sysctl_sched_tunable_scaling = SCHED_TUNABLESCALING_L
  * (default: 0.75 msec * (1 + ilog(ncpus)), units: nanoseconds)
  * (BORE default: 3 msec constant, units: nanoseconds)
  */
-unsigned int sysctl_sched_min_granularity		= 500000ULL;
-unsigned int normalized_sysctl_sched_min_granularity	= 500000ULL;
 #ifdef CONFIG_SCHED_BORE
 unsigned int sysctl_sched_min_granularity		= 3000000ULL;
 unsigned int normalized_sysctl_sched_min_granularity	= 3000000ULL;
@@ -116,8 +112,6 @@ unsigned int sysctl_sched_child_runs_first __read_mostly = 1;
  * (default: 1 msec * (1 + ilog(ncpus)), units: nanoseconds)
  * (BORE default: 4 msec constant, units: nanoseconds)
  */
-unsigned int sysctl_sched_wakeup_granularity		= 5000000UL;
-unsigned int normalized_sysctl_sched_wakeup_granularity	= 5000000UL;
 #ifdef CONFIG_SCHED_BORE
 unsigned int sysctl_sched_wakeup_granularity		= 4000000UL;
 unsigned int normalized_sysctl_sched_wakeup_granularity	= 4000000UL;
