@@ -2,7 +2,6 @@
 /*
  * Copyright (C) 2017-2018 HUAWEI, Inc.
  *             https://www.huawei.com/
- * Copyright (C) 2021, Alibaba Cloud
  */
 #include "xattr.h"
 
@@ -123,11 +122,8 @@ static struct page *erofs_read_inode(struct inode *inode,
 		/* total blocks for compressed files */
 		if (erofs_inode_is_data_compressed(vi->datalayout))
 			nblks = le32_to_cpu(die->i_u.compressed_blocks);
-		else if (vi->datalayout == EROFS_INODE_CHUNK_BASED)
-			/* fill chunked inode summary info */
-			vi->chunkformat = le16_to_cpu(die->i_u.c.format);
+
 		kfree(copied);
-		copied = NULL;
 		break;
 	case EROFS_INODE_LAYOUT_COMPACT:
 		vi->inode_isize = sizeof(struct erofs_inode_compact);
@@ -164,8 +160,6 @@ static struct page *erofs_read_inode(struct inode *inode,
 		inode->i_size = le32_to_cpu(dic->i_size);
 		if (erofs_inode_is_data_compressed(vi->datalayout))
 			nblks = le32_to_cpu(dic->i_u.compressed_blocks);
-		else if (vi->datalayout == EROFS_INODE_CHUNK_BASED)
-			vi->chunkformat = le16_to_cpu(dic->i_u.c.format);
 		break;
 	default:
 		erofs_err(inode->i_sb,
@@ -175,17 +169,6 @@ static struct page *erofs_read_inode(struct inode *inode,
 		goto err_out;
 	}
 
-	if (vi->datalayout == EROFS_INODE_CHUNK_BASED) {
-		if (vi->chunkformat & ~EROFS_CHUNK_FORMAT_ALL) {
-			erofs_err(inode->i_sb,
-				  "unsupported chunk format %x of nid %llu",
-				  vi->chunkformat, vi->nid);
-			err = -EOPNOTSUPP;
-			goto err_out;
-		}
-		vi->chunkbits = LOG_BLOCK_SIZE +
-			(vi->chunkformat & EROFS_CHUNK_FORMAT_BLKBITS_MASK);
-	}
 	inode->i_mtime.tv_sec = inode->i_ctime.tv_sec;
 	inode->i_atime.tv_sec = inode->i_ctime.tv_sec;
 	inode->i_mtime.tv_nsec = inode->i_ctime.tv_nsec;
@@ -214,11 +197,14 @@ static int erofs_fill_symlink(struct inode *inode, void *data,
 			      unsigned int m_pofs)
 {
 	struct erofs_inode *vi = EROFS_I(inode);
+	loff_t off;
 	char *lnk;
 
-	/* if it cannot be handled with fast symlink scheme */
-	if (vi->datalayout != EROFS_INODE_FLAT_INLINE ||
-	    inode->i_size >= PAGE_SIZE) {
+	m_pofs += vi->xattr_isize;
+	/* check if it cannot be handled with fast symlink scheme */
+	if (vi->datalayout != EROFS_INODE_FLAT_INLINE || inode->i_size < 0 ||
+	    check_add_overflow((loff_t)m_pofs, inode->i_size, &off) ||
+	    off > i_blocksize(inode)) {
 		inode->i_op = &erofs_symlink_iops;
 		return 0;
 	}
@@ -226,17 +212,6 @@ static int erofs_fill_symlink(struct inode *inode, void *data,
 	lnk = kmalloc(inode->i_size + 1, GFP_KERNEL);
 	if (!lnk)
 		return -ENOMEM;
-
-	m_pofs += vi->xattr_isize;
-	/* inline symlink data shouldn't cross page boundary as well */
-	if (m_pofs + inode->i_size > PAGE_SIZE) {
-		kfree(lnk);
-		erofs_err(inode->i_sb,
-			  "inline data cross block boundary @ nid %llu",
-			  vi->nid);
-		DBG_BUGON(1);
-		return -EFSCORRUPTED;
-	}
 
 	memcpy(lnk, data + m_pofs, inode->i_size);
 	lnk[inode->i_size] = '\0';
