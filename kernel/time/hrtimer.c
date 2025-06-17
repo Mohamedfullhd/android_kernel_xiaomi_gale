@@ -1780,7 +1780,7 @@ long hrtimer_nanosleep(const struct timespec64 *rqtp,
 	struct hrtimer_sleeper t;
 	int ret = 0;
 
-	hrtimer_init_sleeper_on_stack(&t.timer, clockid, mode);
+	hrtimer_init_sleeper_on_stack(&t, clockid, mode);
 	hrtimer_set_expires_range_ns(&t.timer, timespec64_to_ktime(*rqtp), current->timer_slack_ns);
 	ret = do_nanosleep(&t, mode);
 	if (ret != -ERESTART_RESTARTBLOCK)
