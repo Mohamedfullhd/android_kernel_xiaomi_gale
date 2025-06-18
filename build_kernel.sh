@@ -7,7 +7,7 @@ set -e
 
 KERNEL_DIR="$(pwd)"
 CHAT_ID="7861399342"
-TOKEN="8188281304:AAGd1EB1FqT4NQjOgS7p4IfPyjYRXjHvIMw"
+TOKEN="8058298412:AAGZOl0D_6aYSLXSpfsdUAe-eJ5yoEQyCC0"
 DEVICE="gale"
 KERVER=$(make -s kernelversion | tr -d '[:space:]')
 VERSION=v1
