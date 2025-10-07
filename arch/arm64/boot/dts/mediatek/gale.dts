@@ -205,6 +205,10 @@
 	mt6370pd,intr_gpio = <&pio 41 0x0>;
 };
 
+&thermal_message {
+	board-sensor = "VIRTUAL-SENSOR";
+};
+
 /* CONSYS GPIO standardization */
 &pio {
 	consys_pins_default: consys_default {
